@@ -11,6 +11,7 @@ from utils.chart_builder import ChartBuilder
 from components.stock_dashboard import StockDashboard
 from components.options_dashboard import OptionsDashboard
 from components.dark_pool_tracker import DarkPoolTracker
+from components.weekly_outlook import WeeklyOutlook
 
 # Page configuration
 st.set_page_config(
@@ -107,7 +108,7 @@ def main():
         st.rerun()
     
     # Main dashboard tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Stock Overview", "⚡ Options Flow", "🌊 Dark Pool Activity", "📈 Technical Analysis"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Stock Overview", "⚡ Options Flow", "🌊 Dark Pool Activity", "📈 Technical Analysis", "🔮 Weekly Outlook"])
     
     if not selected_stocks:
         st.warning("Please select at least one mining stock to track.")
@@ -140,6 +141,11 @@ def main():
         # Tab 4: Technical Analysis
         with tab4:
             render_technical_analysis(stock_data, selected_stocks, chart_builder)
+        
+        # Tab 5: Weekly Outlook
+        with tab5:
+            weekly_outlook = WeeklyOutlook()
+            weekly_outlook.render(selected_stocks, MINING_STOCKS)
             
     except Exception as e:
         st.error(f"An error occurred while fetching data: {str(e)}")
