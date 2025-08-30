@@ -171,12 +171,12 @@ class DataFetcher:
             volume_ratio = volumes / avg_volume
             
             return {
-                'vwap': vwap.iloc[-1] if not vwap.empty else 0,
-                'current_price': prices.iloc[-1] if not prices.empty else 0,
+                'vwap': vwap.iloc[-1] if len(vwap) > 0 else 0,
+                'current_price': prices.iloc[-1] if len(prices) > 0 else 0,
                 'unusual_volume_pct': (unusual_volume_days.sum() / len(unusual_volume_days)) * 100,
-                'avg_volume': avg_volume.iloc[-1] if not avg_volume.empty else 0,
-                'current_volume': volumes.iloc[-1] if not volumes.empty else 0,
-                'volume_ratio': volume_ratio.iloc[-1] if not volume_ratio.empty else 0
+                'avg_volume': avg_volume.iloc[-1] if len(avg_volume) > 0 else 0,
+                'current_volume': volumes.iloc[-1] if len(volumes) > 0 else 0,
+                'volume_ratio': volume_ratio.iloc[-1] if len(volume_ratio) > 0 else 0
             }
             
         except Exception as e:

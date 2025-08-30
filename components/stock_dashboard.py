@@ -10,7 +10,7 @@ class StockDashboard:
         """Render the main stock dashboard"""
         
         # Market overview section
-        self._render_market_overview()
+        self._render_market_overview(stock_data)
         
         # Stock performance grid
         self._render_performance_grid(stock_data, selected_stocks, stock_names)
@@ -24,7 +24,7 @@ class StockDashboard:
             st.subheader("🔗 Correlation Analysis")
             self._render_correlation_analysis(stock_data, chart_builder)
     
-    def _render_market_overview(self):
+    def _render_market_overview(self, stock_data=None):
         """Render market overview section"""
         st.subheader("🌍 Market Overview")
         
@@ -55,6 +55,7 @@ class StockDashboard:
         with col2:
             # VIX Fear & Greed
             try:
+                import yfinance as yf
                 vix = yf.Ticker("^VIX")
                 vix_data = vix.history(period='2d')
                 
@@ -76,6 +77,7 @@ class StockDashboard:
         with col3:
             # Market sentiment
             try:
+                import yfinance as yf
                 spy = yf.Ticker("SPY")
                 spy_data = spy.history(period='2d')
                 
@@ -96,7 +98,7 @@ class StockDashboard:
         
         with col4:
             # Mining sector average
-            if not stock_data.empty:
+            if stock_data is not None and not stock_data.empty:
                 latest_prices = stock_data.iloc[-1]
                 prev_prices = stock_data.iloc[-2] if len(stock_data) > 1 else latest_prices
                 

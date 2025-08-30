@@ -164,11 +164,11 @@ class OptionsAnalyzer:
                 'deep_itm': 0
             }
             
-            all_options = pd.concat([calls_df, puts_df])
+            all_options = pd.concat([calls_df, puts_df], ignore_index=True)
             
             for _, option in all_options.iterrows():
                 strike = option['strike']
-                volume = option['volume'] if pd.notna(option['volume']) else 0
+                volume = option['volume'] if not pd.isna(option['volume']) else 0
                 
                 moneyness = abs(strike - current_price) / current_price
                 
