@@ -465,7 +465,7 @@ class WeeklyOutlook:
             
             with col2:
                 # Visual score representation
-                score_normalized = (outlook['score'] + 5) / 10 * 100  # Convert -5 to +5 to 0-100
+                score_normalized = max(0, min(100, (outlook['score'] + 5) / 10 * 100))  # Convert -5 to +5 to 0-100, clamp to valid range
                 st.progress(score_normalized / 100)
                 st.write(f"Overall Strength: {score_normalized:.0f}%")
             
@@ -522,7 +522,7 @@ class WeeklyOutlook:
             # Simplified options analysis based on volatility and price action
             import yfinance as yf
             ticker = yf.Ticker(symbol)
-            hist = ticker.history(period='1M')
+            hist = ticker.history(period='1mo')
             
             if not hist.empty:
                 # Calculate implied volatility proxy from price movements

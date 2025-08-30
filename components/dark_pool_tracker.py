@@ -213,7 +213,7 @@ class DarkPoolTracker:
                 current_volume = indicators.get('current_volume', 0)
                 
                 if avg_volume > 0:
-                    volume_percentile = min(100, (current_volume / avg_volume) * 50)
+                    volume_percentile = max(0, min(100, (current_volume / avg_volume) * 50))
                     st.progress(volume_percentile / 100)
                     st.caption(f"Current: {current_volume:,} vs Avg: {avg_volume:,.0f}")
             
