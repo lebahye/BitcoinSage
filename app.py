@@ -12,6 +12,9 @@ from components.stock_dashboard import StockDashboard
 from components.options_dashboard import OptionsDashboard
 from components.dark_pool_tracker import DarkPoolTracker
 from components.weekly_outlook import WeeklyOutlook
+from components.enhanced_technical import EnhancedTechnical
+from components.sentiment_analysis import SentimentAnalysis
+from components.risk_management import RiskManagement
 
 # Page configuration
 st.set_page_config(
@@ -107,8 +110,17 @@ def main():
     if st.sidebar.button("🔄 Refresh Data"):
         st.rerun()
     
-    # Main dashboard tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Stock Overview", "⚡ Options Flow", "🌊 Dark Pool Activity", "📈 Technical Analysis", "🔮 Weekly Outlook"])
+    # Main dashboard tabs - Enhanced with new analytical components
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+        "📊 Stock Overview", 
+        "⚡ Options Flow", 
+        "🌊 Dark Pool Activity", 
+        "📈 Technical Analysis",
+        "🔬 Enhanced Technical", 
+        "📰 Sentiment Analysis", 
+        "⚠️ Risk Management",
+        "🔮 Market Outlook"
+    ])
     
     if not selected_stocks:
         st.warning("Please select at least one mining stock to track.")
@@ -142,8 +154,23 @@ def main():
         with tab4:
             render_technical_analysis(stock_data, selected_stocks, chart_builder)
         
-        # Tab 5: Weekly Outlook
+        # Tab 5: Enhanced Technical Analysis
         with tab5:
+            enhanced_technical = EnhancedTechnical()
+            enhanced_technical.render(selected_stocks, MINING_STOCKS)
+        
+        # Tab 6: Sentiment Analysis
+        with tab6:
+            sentiment_analysis = SentimentAnalysis()
+            sentiment_analysis.render(selected_stocks, MINING_STOCKS)
+        
+        # Tab 7: Risk Management
+        with tab7:
+            risk_management = RiskManagement()
+            risk_management.render(selected_stocks, MINING_STOCKS)
+        
+        # Tab 8: Market Outlook (Enhanced Weekly/Monthly)
+        with tab8:
             weekly_outlook = WeeklyOutlook()
             weekly_outlook.render(selected_stocks, MINING_STOCKS)
             

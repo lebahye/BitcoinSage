@@ -4,19 +4,41 @@ import numpy as np
 from datetime import datetime, timedelta
 from utils.data_fetcher import DataFetcher
 from utils.options_analyzer import OptionsAnalyzer
+from components.enhanced_technical import EnhancedTechnical
+from components.sentiment_analysis import SentimentAnalysis
+from components.risk_management import RiskManagement
 
 class WeeklyOutlook:
-    """Weekly price direction analysis component"""
+    """Weekly/Monthly price direction analysis component"""
     
     def __init__(self):
         self.data_fetcher = DataFetcher()
         self.options_analyzer = OptionsAnalyzer()
+        self.enhanced_technical = EnhancedTechnical()
+        self.sentiment_analysis = SentimentAnalysis()
+        self.risk_management = RiskManagement()
     
     def render(self, selected_stocks, stock_names):
-        """Render weekly outlook dashboard"""
+        """Render weekly/monthly outlook dashboard"""
         
-        st.subheader("🔮 Weekly Price Outlook")
-        st.write("Algorithmic analysis combining technical indicators, options flow, and dark pool activity to predict weekly direction.")
+        # Time period selector
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            st.subheader("🔮 Price Direction Outlook")
+            st.write("Comprehensive analysis combining all data sources for intelligent price predictions.")
+        
+        with col2:
+            time_frame = st.selectbox(
+                "Analysis Period",
+                ["Weekly", "Monthly"],
+                index=0,
+                help="Choose prediction timeframe"
+            )
+        
+        # Dynamic title based on selection
+        period_emoji = "📅" if time_frame == "Weekly" else "📆"
+        st.markdown(f"### {period_emoji} {time_frame} Market Direction Analysis")
         
         # Disclaimer
         with st.expander("⚠️ Important Disclaimer", expanded=False):
@@ -26,17 +48,30 @@ class WeeklyOutlook:
             Use this analysis as one factor among many in your trading decisions.
             """)
         
+        # Get integrated data from all components
+        technical_data = self.enhanced_technical.get_technical_data(selected_stocks)
+        sentiment_data = self.sentiment_analysis.get_sentiment_data(selected_stocks)
+        risk_data = self.risk_management.get_risk_data(selected_stocks)
+        
         # Generate outlook for each stock
         outlook_data = []
         
         for symbol in selected_stocks:
-            outlook = self._analyze_stock_outlook(symbol, stock_names.get(symbol, symbol))
+            outlook = self._analyze_stock_outlook(
+                symbol, 
+                stock_names.get(symbol, symbol),
+                time_frame,
+                technical_data.get(symbol, {}),
+                sentiment_data.get(symbol, {}),
+                risk_data.get(symbol, {}),
+                sentiment_data.get('market', {})
+            )
             if outlook:
                 outlook_data.append(outlook)
         
         if outlook_data:
             # Summary overview
-            self._render_sector_summary(outlook_data)
+            self._render_sector_summary(outlook_data, time_frame)
             
             # Individual stock outlooks
             st.subheader("📊 Individual Stock Outlooks")
@@ -45,8 +80,8 @@ class WeeklyOutlook:
         else:
             st.error("Unable to generate outlook data. Please try refreshing.")
     
-    def _analyze_stock_outlook(self, symbol, company_name):
-        """Analyze individual stock for weekly outlook"""
+    def _analyze_stock_outlook(self, symbol, company_name, time_frame, technical_data, sentiment_data, risk_data, market_data):
+        """Analyze individual stock for weekly/monthly outlook"""
         try:
             outlook = {
                 'symbol': symbol,
@@ -57,11 +92,17 @@ class WeeklyOutlook:
                 'score': 0,
                 'technical_score': 0,
                 'options_score': 0,
-                'volume_score': 0
+                'volume_score': 0,
+                'sentiment_score': 0,
+                'risk_score': 0,
+                'time_frame': time_frame,
+                'price_target': 0,
+                'probability': 0
             }
             
-            # Get stock data for technical analysis
-            stock_data = self.data_fetcher.get_stock_data([symbol], '1M')
+            # Get stock data for analysis
+            period = '2M' if time_frame == 'Monthly' else '1M'
+            stock_data = self.data_fetcher.get_stock_data([symbol], period)
             if stock_data.empty or symbol not in stock_data.columns:
                 return None
                 
@@ -71,9 +112,17 @@ class WeeklyOutlook:
             
             current_price = prices.iloc[-1]
             
-            # Technical Analysis Score (-3 to +3)
-            technical_score = self._calculate_technical_score(prices)
+            # Enhanced Technical Analysis Score (-3 to +3) - Using new component data
+            technical_score = self._calculate_enhanced_technical_score(prices, technical_data)
             outlook['technical_score'] = technical_score
+            
+            # Sentiment Analysis Score (-3 to +3) - New component
+            sentiment_score = self._calculate_sentiment_score(sentiment_data, market_data)
+            outlook['sentiment_score'] = sentiment_score
+            
+            # Risk-Adjusted Score (-2 to +2) - New component  
+            risk_score = self._calculate_risk_adjusted_score(risk_data)
+            outlook['risk_score'] = risk_score
             
             # Options Flow Score (-3 to +3)  
             options_score = self._calculate_options_score(symbol, current_price)
@@ -83,29 +132,39 @@ class WeeklyOutlook:
             volume_score = self._calculate_volume_score(symbol)
             outlook['volume_score'] = volume_score
             
-            # Combined Score
-            total_score = technical_score + options_score + volume_score
+            # Combined Score (Enhanced with all components)
+            total_score = technical_score + options_score + volume_score + sentiment_score + risk_score
             outlook['score'] = total_score
             
-            # Determine direction and confidence
-            if total_score >= 2:
+            # Calculate price target and probability
+            outlook['price_target'] = self._calculate_price_target(current_price, total_score, time_frame)
+            outlook['probability'] = self._calculate_probability(total_score, time_frame)
+            
+            # Determine direction and confidence (Enhanced with better thresholds)
+            if total_score >= 3:
+                outlook['direction'] = 'Strong Bullish'
+                outlook['confidence'] = min(95, 70 + (total_score - 3) * 5)
+            elif total_score >= 1.5:
                 outlook['direction'] = 'Bullish'
-                outlook['confidence'] = min(90, 60 + (total_score - 2) * 10)
-            elif total_score >= 1:
+                outlook['confidence'] = min(85, 60 + (total_score - 1.5) * 8)
+            elif total_score >= 0.5:
                 outlook['direction'] = 'Mild Bullish'
-                outlook['confidence'] = 55 + total_score * 5
-            elif total_score <= -2:
+                outlook['confidence'] = 50 + total_score * 10
+            elif total_score <= -3:
+                outlook['direction'] = 'Strong Bearish'
+                outlook['confidence'] = min(95, 70 + abs(total_score + 3) * 5)
+            elif total_score <= -1.5:
                 outlook['direction'] = 'Bearish'
-                outlook['confidence'] = min(90, 60 + abs(total_score + 2) * 10)
-            elif total_score <= -1:
+                outlook['confidence'] = min(85, 60 + abs(total_score + 1.5) * 8)
+            elif total_score <= -0.5:
                 outlook['direction'] = 'Mild Bearish'  
-                outlook['confidence'] = 55 + abs(total_score) * 5
+                outlook['confidence'] = 50 + abs(total_score) * 10
             else:
                 outlook['direction'] = 'Neutral'
                 outlook['confidence'] = 40 + abs(total_score) * 5
             
-            # Generate reasoning factors
-            outlook['factors'] = self._generate_factors(technical_score, options_score, volume_score, symbol)
+            # Generate explanatory factors
+            outlook['factors'] = self._generate_factors(outlook, technical_data, sentiment_data, risk_data, market_data)
             
             return outlook
             
@@ -113,244 +172,424 @@ class WeeklyOutlook:
             st.error(f"Error analyzing {symbol}: {str(e)}")
             return None
     
-    def _calculate_technical_score(self, prices):
-        """Calculate technical analysis score (-3 to +3)"""
-        score = 0
-        
+    def _calculate_enhanced_technical_score(self, prices, technical_data):
+        """Calculate enhanced technical score using advanced indicators"""
         try:
-            current_price = prices.iloc[-1]
+            score = 0
             
-            # Moving Average Analysis
-            if len(prices) >= 20:
-                sma_20 = prices.rolling(20).mean().iloc[-1]
-                if current_price > sma_20 * 1.02:  # Above SMA20 by 2%
-                    score += 1
-                elif current_price < sma_20 * 0.98:  # Below SMA20 by 2%
-                    score -= 1
-            
-            if len(prices) >= 50:
-                sma_50 = prices.rolling(50).mean().iloc[-1]
-                if current_price > sma_50 * 1.03:  # Above SMA50 by 3%
-                    score += 1
-                elif current_price < sma_50 * 0.97:  # Below SMA50 by 3%
-                    score -= 1
-            
-            # Momentum Analysis
-            if len(prices) >= 5:
-                week_change = (current_price - prices.iloc[-5]) / prices.iloc[-5]
-                if week_change > 0.05:  # Up 5% in a week
-                    score += 1
-                elif week_change < -0.05:  # Down 5% in a week
-                    score -= 1
-            
-            # RSI Analysis
-            if len(prices) >= 14:
-                rsi = self._calculate_rsi(prices)
-                if rsi < 30:  # Oversold
-                    score += 1
-                elif rsi > 70:  # Overbought
-                    score -= 1
+            # Use data from enhanced technical component if available
+            if technical_data:
+                trend_signal = technical_data.get('trend_signal', 'Neutral')
+                momentum_signal = technical_data.get('momentum_signal', 'Mixed')
+                technical_score = technical_data.get('technical_score', 0)
+                
+                # Convert enhanced component data to score
+                if trend_signal == 'Bullish':
+                    score += 1.5
+                elif trend_signal == 'Bearish':
+                    score -= 1.5
+                
+                if momentum_signal == 'Strong':
+                    score += 1.0
+                elif momentum_signal == 'Weak':
+                    score -= 1.0
+                
+                # Use normalized technical score from component
+                score += (technical_score / 5.0) * 0.5  # Convert 5-point scale to 0.5 contribution
+            else:
+                # Fallback to basic technical analysis
+                score = self._calculate_technical_score(prices)
             
             return max(-3, min(3, score))
             
-        except Exception:
+        except Exception as e:
             return 0
     
-    def _calculate_options_score(self, symbol, current_price):
-        """Calculate options flow score (-3 to +3)"""
-        score = 0
-        
+    def _calculate_sentiment_score(self, sentiment_data, market_data):
+        """Calculate sentiment score from sentiment analysis component"""
         try:
-            calls_df, puts_df = self.data_fetcher.get_options_data(symbol)
+            score = 0
             
-            if calls_df is None and puts_df is None:
-                return 0
+            if sentiment_data:
+                # Individual stock sentiment
+                sentiment_bias = sentiment_data.get('sentiment_bias', 0)
+                score += sentiment_bias
                 
-            # Put-Call Ratio Analysis
-            pc_analysis = self.options_analyzer.analyze_put_call_ratio(calls_df, puts_df)
-            pc_ratio = pc_analysis.get('put_call_ratio', 1.0)
+                # Sentiment score normalization
+                sentiment_score = sentiment_data.get('sentiment_score', 5.0)
+                normalized_sentiment = (sentiment_score - 5.0) / 5.0 * 2.0  # Convert to -2 to +2 scale
+                score += normalized_sentiment
             
-            if pc_ratio < 0.6:  # Very bullish
-                score += 2
-            elif pc_ratio < 0.8:  # Bullish
-                score += 1
-            elif pc_ratio > 1.4:  # Very bearish
-                score -= 2
-            elif pc_ratio > 1.2:  # Bearish
-                score -= 1
+            if market_data:
+                # Market-wide sentiment influence
+                market_bias = market_data.get('market_bias', 'Neutral')
+                if market_bias == 'Bullish':
+                    score += 0.5
+                elif market_bias == 'Bearish':
+                    score -= 0.5
+                
+                # Fear/Greed influence
+                fear_greed = market_data.get('fear_greed_score', 50)
+                if fear_greed > 70:
+                    score -= 0.5  # Extreme greed is bearish
+                elif fear_greed < 30:
+                    score += 0.5  # Extreme fear is bullish
             
-            # Options Flow Analysis
-            flow_metrics = self.options_analyzer.calculate_options_flow_metrics(
-                calls_df, puts_df, current_price
-            )
+            return max(-3, min(3, score))
             
-            smart_money = flow_metrics.get('smart_money_indicator', 'Neutral')
-            if 'Strong Bullish' in smart_money:
-                score += 1
-            elif 'Bullish' in smart_money:
-                score += 0.5
-            elif 'Strong Bearish' in smart_money:
-                score -= 1
-            elif 'Bearish' in smart_money:
-                score -= 0.5
-            
-            return max(-3, min(3, int(score)))
-            
-        except Exception:
+        except Exception as e:
             return 0
     
-    def _calculate_volume_score(self, symbol):
-        """Calculate volume/dark pool score (-3 to +3)"""
-        score = 0
-        
+    def _calculate_risk_adjusted_score(self, risk_data):
+        """Calculate risk-adjusted score from risk management component"""
         try:
-            indicators = self.data_fetcher.calculate_dark_pool_indicators(symbol)
+            score = 0
             
-            if not indicators:
-                return 0
+            if risk_data:
+                # Risk adjustment factor
+                risk_adjustment = risk_data.get('risk_adjustment', 0)
+                score += risk_adjustment
+                
+                # Volatility adjustment
+                volatility = risk_data.get('volatility', 50)
+                if volatility > 80:
+                    score -= 1.0  # High volatility reduces conviction
+                elif volatility > 60:
+                    score -= 0.5  # Moderate volatility slight reduction
+                elif volatility < 30:
+                    score += 0.5  # Low volatility increases conviction
+                
+                # Risk score influence
+                risk_score = risk_data.get('risk_score', 5.0)
+                if risk_score > 8:
+                    score -= 0.5  # Very risky reduces conviction
+                elif risk_score < 3:
+                    score += 0.5  # Low risk increases conviction
             
-            volume_ratio = indicators.get('volume_ratio', 1.0)
-            unusual_volume_pct = indicators.get('unusual_volume_pct', 0)
-            current_price = indicators.get('current_price', 0)
-            vwap = indicators.get('vwap', 0)
+            return max(-2, min(2, score))
             
-            # Volume Analysis
-            if volume_ratio > 3.0:  # Very high volume
-                score += 1
-            elif volume_ratio > 2.0:  # High volume  
-                score += 0.5
-            elif volume_ratio < 0.5:  # Low volume
-                score -= 0.5
-            
-            # VWAP Analysis
-            if vwap > 0:
-                vwap_diff = (current_price - vwap) / vwap
-                if vwap_diff > 0.02:  # Above VWAP
-                    score += 1
-                elif vwap_diff < -0.02:  # Below VWAP
-                    score -= 1
-            
-            # Unusual Activity
-            if unusual_volume_pct > 40:  # Frequent unusual activity
-                score += 0.5
-            
-            return max(-3, min(3, int(score)))
-            
-        except Exception:
+        except Exception as e:
             return 0
     
-    def _calculate_rsi(self, prices, window=14):
-        """Calculate RSI"""
+    def _calculate_price_target(self, current_price, total_score, time_frame):
+        """Calculate price target based on score and timeframe"""
         try:
-            delta = prices.diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-            rs = gain / loss
-            rsi = 100 - (100 / (1 + rs))
-            return rsi.iloc[-1] if not pd.isna(rsi.iloc[-1]) else 50.0
-        except:
-            return 50.0
+            # Base movement percentage based on score strength
+            base_move = abs(total_score) * 0.05  # 5% per point
+            
+            # Adjust for timeframe
+            if time_frame == 'Monthly':
+                base_move *= 2.0  # Monthly targets can be larger
+            
+            # Direction
+            if total_score > 0:
+                target = current_price * (1 + base_move)
+            else:
+                target = current_price * (1 - base_move)
+            
+            return round(target, 2)
+            
+        except Exception as e:
+            return current_price
     
-    def _generate_factors(self, tech_score, options_score, volume_score, symbol):
-        """Generate reasoning factors"""
+    def _calculate_probability(self, total_score, time_frame):
+        """Calculate probability of direction based on score"""
+        try:
+            # Base probability from score strength
+            base_prob = min(95, 50 + abs(total_score) * 8)
+            
+            # Adjust for timeframe (longer term is less certain)
+            if time_frame == 'Monthly':
+                base_prob *= 0.9
+            
+            return round(base_prob)
+            
+        except Exception as e:
+            return 50
+    
+    def _generate_factors(self, outlook, technical_data, sentiment_data, risk_data, market_data):
+        """Generate explanatory factors for the outlook"""
         factors = []
         
-        # Technical factors
-        if tech_score >= 2:
-            factors.append("Strong technical momentum with price above key moving averages")
-        elif tech_score >= 1:
-            factors.append("Positive technical signals from trend and momentum indicators")
-        elif tech_score <= -2:
-            factors.append("Weak technical picture with bearish momentum signals")
-        elif tech_score <= -1:
-            factors.append("Technical indicators showing downward pressure")
-        
-        # Options factors
-        if options_score >= 2:
-            factors.append("Bullish options flow with low put-call ratio")
-        elif options_score >= 1:
-            factors.append("Options activity suggests mild bullish sentiment")
-        elif options_score <= -2:
-            factors.append("Heavy put buying indicates bearish options positioning")
-        elif options_score <= -1:
-            factors.append("Options flow shows defensive positioning")
-        
-        # Volume factors
-        if volume_score >= 1:
-            factors.append("High volume activity with institutional accumulation signs")
-        elif volume_score <= -1:
-            factors.append("Volume patterns suggest distribution or low interest")
-        
-        if not factors:
-            factors.append("Mixed signals across technical, options, and volume indicators")
-        
-        return factors
+        try:
+            # Technical factors
+            if outlook['technical_score'] > 1:
+                factors.append("🟢 Strong technical indicators support upward momentum")
+            elif outlook['technical_score'] < -1:
+                factors.append("🔴 Technical indicators suggest downward pressure")
+            
+            if technical_data:
+                trend = technical_data.get('trend_signal', '')
+                if trend == 'Bullish':
+                    factors.append("📈 Bullish trend confirmation across multiple timeframes")
+                elif trend == 'Bearish':
+                    factors.append("📉 Bearish trend signals dominating")
+            
+            # Sentiment factors
+            if outlook['sentiment_score'] > 1:
+                factors.append("😊 Positive market sentiment and crypto correlation")
+            elif outlook['sentiment_score'] < -1:
+                factors.append("😰 Negative sentiment weighing on mining sector")
+            
+            # Risk factors
+            if outlook['risk_score'] < -0.5:
+                factors.append("⚠️ High volatility and risk metrics suggest caution")
+            elif outlook['risk_score'] > 0.5:
+                factors.append("✅ Risk metrics support position sizing")
+            
+            # Options factors
+            if outlook['options_score'] > 1:
+                factors.append("⚡ Options flow showing institutional bullish positioning")
+            elif outlook['options_score'] < -1:
+                factors.append("⚡ Options activity suggests bearish institutional sentiment")
+            
+            # Volume factors
+            if outlook['volume_score'] > 1:
+                factors.append("🌊 Dark pool activity and volume support the move")
+            elif outlook['volume_score'] < -1:
+                factors.append("🌊 Volume patterns show distribution/selling pressure")
+            
+            # Market context
+            if market_data:
+                fear_greed = market_data.get('fear_greed_score', 50)
+                if fear_greed > 75:
+                    factors.append("🚨 Extreme greed levels suggest potential reversal risk")
+                elif fear_greed < 25:
+                    factors.append("💎 Extreme fear creates contrarian opportunity")
+            
+            # Confidence context
+            if outlook['confidence'] > 80:
+                factors.append(f"🎯 High confidence {outlook['time_frame'].lower()} prediction")
+            elif outlook['confidence'] < 50:
+                factors.append(f"🤔 Lower confidence due to mixed signals")
+            
+            return factors[:6]  # Limit to 6 most relevant factors
+            
+        except Exception as e:
+            return ["Analysis based on available market data"]
     
-    def _render_sector_summary(self, outlook_data):
-        """Render sector-wide summary"""
-        st.subheader("🎯 Sector Summary")
+    def _render_sector_summary(self, outlook_data, time_frame):
+        """Render sector summary with enhanced metrics"""
+        st.subheader(f"🎯 {time_frame} Sector Summary")
         
-        # Calculate sector metrics
+        # Calculate summary statistics
+        total_stocks = len(outlook_data)
         bullish_count = len([x for x in outlook_data if 'Bullish' in x['direction']])
         bearish_count = len([x for x in outlook_data if 'Bearish' in x['direction']])
-        neutral_count = len(outlook_data) - bullish_count - bearish_count
+        neutral_count = total_stocks - bullish_count - bearish_count
         
         avg_confidence = np.mean([x['confidence'] for x in outlook_data])
+        avg_score = np.mean([x['score'] for x in outlook_data])
         
-        col1, col2, col3, col4 = st.columns(4)
+        # Display summary metrics
+        col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
-            st.metric("Bullish Stocks", bullish_count)
+            st.metric("Bullish Signals", f"{bullish_count}/{total_stocks}")
+            if bullish_count > total_stocks / 2:
+                st.success("Sector Bullish")
             
         with col2:
-            st.metric("Bearish Stocks", bearish_count)
-            
+            st.metric("Bearish Signals", f"{bearish_count}/{total_stocks}")
+            if bearish_count > total_stocks / 2:
+                st.error("Sector Bearish")
+        
         with col3:
-            st.metric("Neutral Stocks", neutral_count)
-            
+            st.metric("Neutral", f"{neutral_count}/{total_stocks}")
+        
         with col4:
             st.metric("Avg Confidence", f"{avg_confidence:.0f}%")
         
-        # Sector bias
-        if bullish_count > bearish_count:
-            st.success(f"🟢 **Sector Bias: BULLISH** - {bullish_count} stocks showing upward signals")
-        elif bearish_count > bullish_count:
-            st.error(f"🔴 **Sector Bias: BEARISH** - {bearish_count} stocks showing downward signals") 
+        with col5:
+            st.metric("Sector Score", f"{avg_score:+.1f}")
+            if avg_score > 1:
+                st.success("Strong")
+            elif avg_score < -1:
+                st.error("Weak")
+            else:
+                st.info("Mixed")
+        
+        # Sector outlook
+        if avg_score > 1.5:
+            sector_outlook = f"🟢 **Strong {time_frame} Bullish Outlook** - Multiple confirmations across technical, sentiment, and flow analysis"
+        elif avg_score > 0.5:
+            sector_outlook = f"🟢 **{time_frame} Bullish Bias** - Positive signals outweigh negative factors"
+        elif avg_score < -1.5:
+            sector_outlook = f"🔴 **Strong {time_frame} Bearish Outlook** - Multiple bearish confirmations across data sources"
+        elif avg_score < -0.5:
+            sector_outlook = f"🔴 **{time_frame} Bearish Bias** - Negative signals dominating"
         else:
-            st.info("⚪ **Sector Bias: NEUTRAL** - Mixed signals across mining stocks")
+            sector_outlook = f"🟡 **{time_frame} Neutral/Mixed** - Conflicting signals require selective stock picking"
+        
+        st.markdown(sector_outlook)
+        
+        # Top picks based on score
+        sorted_outlooks = sorted(outlook_data, key=lambda x: x['score'], reverse=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**🏆 Top Bullish Picks:**")
+            for i, outlook in enumerate(sorted_outlooks[:3]):
+                if outlook['score'] > 0:
+                    st.write(f"{i+1}. **{outlook['symbol']}** - {outlook['direction']} ({outlook['confidence']}% confidence)")
+        
+        with col2:
+            st.write("**🔻 Most Bearish:**")
+            for i, outlook in enumerate(reversed(sorted_outlooks[-3:])):
+                if outlook['score'] < 0:
+                    st.write(f"{i+1}. **{outlook['symbol']}** - {outlook['direction']} ({outlook['confidence']}% confidence)")
     
     def _render_stock_outlook(self, outlook):
-        """Render individual stock outlook"""
-        
-        with st.expander(f"{outlook['symbol']} - {outlook['company']}", expanded=True):
+        """Render individual stock outlook with enhanced display"""
+        with st.expander(f"{outlook['symbol']} - {outlook['company']} | {outlook['direction']} ({outlook['confidence']}%)", expanded=False):
+            
             col1, col2 = st.columns([2, 1])
             
             with col1:
                 # Direction and confidence
-                direction = outlook['direction']
-                confidence = outlook['confidence']
+                direction_color = "🟢" if "Bullish" in outlook['direction'] else "🔴" if "Bearish" in outlook['direction'] else "🟡"
+                st.markdown(f"### {direction_color} {outlook['direction']}")
+                st.markdown(f"**Confidence:** {outlook['confidence']}%")
+                st.markdown(f"**{outlook['time_frame']} Price Target:** ${outlook['price_target']:.2f}")
+                st.markdown(f"**Probability:** {outlook['probability']}%")
                 
-                if 'Bullish' in direction:
-                    st.success(f"📈 **{direction.upper()}** - {confidence}% confidence")
-                elif 'Bearish' in direction:
-                    st.error(f"📉 **{direction.upper()}** - {confidence}% confidence")
-                else:
-                    st.info(f"➡️ **{direction.upper()}** - {confidence}% confidence")
-                
-                # Factors
+                # Score breakdown
+                st.write("**Score Breakdown:**")
+                st.write(f"• Technical: {outlook['technical_score']:+.1f}")
+                st.write(f"• Sentiment: {outlook['sentiment_score']:+.1f}")
+                st.write(f"• Options Flow: {outlook['options_score']:+.1f}")
+                st.write(f"• Volume/Dark Pool: {outlook['volume_score']:+.1f}")
+                st.write(f"• Risk Adjustment: {outlook['risk_score']:+.1f}")
+                st.write(f"**Total Score: {outlook['score']:+.1f}**")
+            
+            with col2:
+                # Visual score representation
+                score_normalized = (outlook['score'] + 5) / 10 * 100  # Convert -5 to +5 to 0-100
+                st.progress(score_normalized / 100)
+                st.write(f"Overall Strength: {score_normalized:.0f}%")
+            
+            # Factors
+            if outlook['factors']:
                 st.write("**Key Factors:**")
                 for factor in outlook['factors']:
                     st.write(f"• {factor}")
+    
+    # Keep existing methods for backward compatibility
+    def _calculate_technical_score(self, prices):
+        """Basic technical analysis (fallback method)"""
+        try:
+            score = 0
             
-            with col2:
-                # Score breakdown
-                st.write("**Signal Breakdown:**")
-                st.write(f"Technical: {outlook['technical_score']:+d}/3")
-                st.write(f"Options: {outlook['options_score']:+d}/3")
-                st.write(f"Volume: {outlook['volume_score']:+d}/3")
-                st.write(f"**Total: {outlook['score']:+d}/9**")
+            # Simple moving averages
+            sma_20 = prices.rolling(20).mean()
+            sma_50 = prices.rolling(50).mean() if len(prices) >= 50 else sma_20
+            
+            current_price = prices.iloc[-1]
+            
+            # Price vs moving averages
+            if current_price > sma_20.iloc[-1]:
+                score += 0.5
+            if current_price > sma_50.iloc[-1]:
+                score += 0.5
                 
-                # Confidence bar
-                confidence_color = "green" if confidence > 70 else "orange" if confidence > 50 else "red"
-                st.progress(confidence/100)
-                st.caption(f"{confidence}% confidence")
+            # Moving average trend
+            if sma_20.iloc[-1] > sma_20.iloc[-5]:
+                score += 0.5
+            if len(prices) >= 50 and sma_50.iloc[-1] > sma_50.iloc[-10]:
+                score += 0.5
+                
+            # Recent momentum
+            recent_change = (current_price - prices.iloc[-5]) / prices.iloc[-5]
+            if recent_change > 0.05:
+                score += 1
+            elif recent_change < -0.05:
+                score -= 1
+                
+            return max(-3, min(3, score))
+            
+        except Exception as e:
+            return 0
+    
+    def _calculate_options_score(self, symbol, current_price):
+        """Calculate options flow score"""
+        try:
+            options_data = self.options_analyzer.analyze_options_flow(symbol)
+            
+            if not options_data:
+                return 0
+                
+            score = 0
+            
+            # Put/Call ratio analysis
+            pc_ratio = options_data.get('put_call_ratio', 1.0)
+            if pc_ratio < 0.7:  # More calls than puts
+                score += 1
+            elif pc_ratio > 1.3:  # More puts than calls
+                score -= 1
+                
+            # Volume analysis
+            call_volume = options_data.get('call_volume', 0)
+            put_volume = options_data.get('put_volume', 0)
+            
+            if call_volume > put_volume * 1.5:
+                score += 1
+            elif put_volume > call_volume * 1.5:
+                score -= 1
+                
+            # Unusual activity
+            if options_data.get('unusual_activity', False):
+                score += 0.5
+                
+            return max(-3, min(3, score))
+            
+        except Exception as e:
+            return 0
+    
+    def _calculate_volume_score(self, symbol):
+        """Calculate volume/dark pool score"""
+        try:
+            volume_data = self.data_fetcher.get_stock_data([symbol], '1M')
+            
+            if volume_data.empty or 'Volume' not in volume_data.columns:
+                return 0
+                
+            volumes = volume_data['Volume'].dropna()
+            prices = volume_data[symbol].dropna()
+            
+            if len(volumes) < 10:
+                return 0
+                
+            score = 0
+            
+            # Volume trend
+            recent_vol = volumes.tail(5).mean()
+            older_vol = volumes.head(10).mean()
+            
+            if recent_vol > older_vol * 1.5:
+                score += 1
+            elif recent_vol < older_vol * 0.7:
+                score -= 0.5
+                
+            # Price-volume correlation
+            price_changes = prices.pct_change().dropna()
+            volume_changes = volumes.pct_change().dropna()
+            
+            # Align the data
+            common_index = price_changes.index.intersection(volume_changes.index)
+            if len(common_index) > 10:
+                correlation = np.corrcoef(
+                    price_changes.loc[common_index], 
+                    volume_changes.loc[common_index]
+                )[0, 1]
+                
+                if not np.isnan(correlation):
+                    if correlation > 0.3:  # Positive correlation is bullish
+                        score += 1
+                    elif correlation < -0.3:  # Negative correlation is bearish
+                        score -= 1
+            
+            return max(-3, min(3, score))
+            
+        except Exception as e:
+            return 0
