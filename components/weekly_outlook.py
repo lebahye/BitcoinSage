@@ -514,32 +514,47 @@ class WeeklyOutlook:
     def _calculate_options_score(self, symbol, current_price):
         """Calculate options flow score"""
         try:
-            options_data = self.options_analyzer.analyze_options_flow(symbol)
+            # Get simulated options data since we can't fetch real options chains easily
+            # This would normally use real options data from yfinance or other sources
             
-            if not options_data:
-                return 0
-                
             score = 0
             
-            # Put/Call ratio analysis
-            pc_ratio = options_data.get('put_call_ratio', 1.0)
-            if pc_ratio < 0.7:  # More calls than puts
-                score += 1
-            elif pc_ratio > 1.3:  # More puts than calls
-                score -= 1
-                
-            # Volume analysis
-            call_volume = options_data.get('call_volume', 0)
-            put_volume = options_data.get('put_volume', 0)
+            # Simplified options analysis based on volatility and price action
+            import yfinance as yf
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period='1M')
             
-            if call_volume > put_volume * 1.5:
-                score += 1
-            elif put_volume > call_volume * 1.5:
-                score -= 1
+            if not hist.empty:
+                # Calculate implied volatility proxy from price movements
+                returns = hist['Close'].pct_change().dropna()
+                volatility = returns.std() * np.sqrt(252)  # Annualized volatility
                 
-            # Unusual activity
-            if options_data.get('unusual_activity', False):
-                score += 0.5
+                # Volume-based analysis
+                recent_volume = hist['Volume'].tail(5).mean()
+                avg_volume = hist['Volume'].mean()
+                
+                volume_ratio = recent_volume / avg_volume if avg_volume > 0 else 1
+                
+                # Score based on volatility and volume
+                if volatility > 0.6:  # High volatility suggests options activity
+                    if volume_ratio > 1.5:  # High volume with high volatility
+                        score += 1
+                    elif volume_ratio < 0.7:  # Low volume with high volatility
+                        score -= 0.5
+                
+                # Price momentum factor
+                if len(hist) >= 5:
+                    price_change = (current_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]
+                    if price_change > 0.05:  # Strong upward movement
+                        score += 0.5
+                    elif price_change < -0.05:  # Strong downward movement
+                        score -= 0.5
+                
+                # Recent trend confirmation
+                if hist['Close'].iloc[-1] > hist['Close'].rolling(10).mean().iloc[-1]:
+                    score += 0.5
+                else:
+                    score -= 0.5
                 
             return max(-3, min(3, score))
             
