@@ -157,7 +157,7 @@ class DarkPoolTracker:
             if volume_data and symbol in volume_data:
                 fig = chart_builder.create_dark_pool_chart(symbol, volume_data)
                 if fig:
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
             
             # Dark pool activity signals
             st.subheader("🔍 Activity Signals")

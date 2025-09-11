@@ -13,11 +13,56 @@ class DataFetcher:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
+        # Add caching for better performance
+        self._cache = {}
+        self._cache_timestamps = {}
+        self.cache_duration = 30  # 30 second cache for real-time updates
+    
+    def _get_cache_key(self, method_name, *args):
+        """Generate stable cache key for method and arguments"""
+        # Create stable, sorted key that's not sensitive to argument order
+        stable_args = []
+        for arg in args:
+            if isinstance(arg, (list, tuple)):
+                # Sort lists/tuples for consistency
+                stable_args.append(str(sorted(str(item) for item in arg)))
+            else:
+                stable_args.append(str(arg))
+        
+        # Join with delimiter and use stable hash
+        key_string = f"{method_name}|{'^'.join(sorted(stable_args))}"
+        return f"{method_name}_{abs(hash(key_string))}"
+    
+    def _is_cache_valid(self, cache_key):
+        """Check if cached data is still valid"""
+        import time
+        if cache_key not in self._cache_timestamps:
+            return False
+        return (time.time() - self._cache_timestamps[cache_key]) < self.cache_duration
+    
+    def _get_from_cache(self, cache_key):
+        """Get data from cache if valid"""
+        if self._is_cache_valid(cache_key):
+            return self._cache.get(cache_key)
+        return None
+    
+    def _store_in_cache(self, cache_key, data):
+        """Store data in cache with timestamp"""
+        import time
+        self._cache[cache_key] = data
+        self._cache_timestamps[cache_key] = time.time()
     
     def get_stock_data(self, symbols, period='1M'):
-        """Fetch stock data for given symbols"""
+        """Fetch stock data for given symbols with caching"""
+        
+        # Check cache first
+        cache_key = self._get_cache_key('stock_data', symbols, period)
+        cached_result = self._get_from_cache(cache_key)
+        if cached_result is not None:
+            return cached_result
+            
         try:
-            # Convert period to yfinance format
+            # Convert period to yfinance format with intraday intervals for real-time data
             period_map = {
                 '1D': '1d',
                 '5D': '5d', 
@@ -27,7 +72,18 @@ class DataFetcher:
                 '1Y': '1y'
             }
             
+            # Use intraday intervals for better real-time accuracy
+            interval_map = {
+                '1D': '5m',  # 5-minute intervals for 1 day
+                '5D': '15m', # 15-minute intervals for 5 days
+                '1M': '1h',  # 1-hour intervals for 1 month
+                '3M': '1d',  # Daily for 3 months
+                '6M': '1d',  # Daily for 6 months
+                '1Y': '1d'   # Daily for 1 year
+            }
+            
             yf_period = period_map.get(period, '1mo')
+            yf_interval = interval_map.get(period, '1d')
             
             # Fetch data for all symbols
             tickers = yf.Tickers(' '.join(symbols))
@@ -36,7 +92,7 @@ class DataFetcher:
             for symbol in symbols:
                 try:
                     ticker = yf.Ticker(symbol)
-                    hist = ticker.history(period=yf_period)
+                    hist = ticker.history(period=yf_period, interval=yf_interval)
                     
                     if not hist.empty:
                         data_dict[symbol] = hist['Close']
@@ -48,9 +104,14 @@ class DataFetcher:
                     continue
             
             if data_dict:
-                return pd.DataFrame(data_dict)
+                result = pd.DataFrame(data_dict)
+                # Store in cache
+                self._store_in_cache(cache_key, result)
+                return result
             else:
-                return pd.DataFrame()
+                empty_result = pd.DataFrame()
+                self._store_in_cache(cache_key, empty_result)
+                return empty_result
                 
         except Exception as e:
             st.error(f"Error in get_stock_data: {str(e)}")
@@ -82,7 +143,14 @@ class DataFetcher:
             return {}
     
     def get_options_data(self, symbol):
-        """Fetch options data for a symbol"""
+        """Fetch options data for a symbol with caching"""
+        
+        # Check cache first
+        cache_key = self._get_cache_key('options_data', symbol)
+        cached_result = self._get_from_cache(cache_key)
+        if cached_result is not None:
+            return cached_result
+            
         try:
             ticker = yf.Ticker(symbol)
             
@@ -99,14 +167,26 @@ class DataFetcher:
             calls = option_chain.calls
             puts = option_chain.puts
             
-            return calls, puts
+            result = (calls, puts)
+            # Store in cache
+            self._store_in_cache(cache_key, result)
+            return result
             
         except Exception as e:
             st.error(f"Error fetching options data for {symbol}: {str(e)}")
-            return None, None
+            result = (None, None)
+            self._store_in_cache(cache_key, result)
+            return result
     
     def get_volume_data(self, symbols, period='1M'):
-        """Fetch volume data for dark pool analysis"""
+        """Fetch volume data for dark pool analysis with caching"""
+        
+        # Check cache first
+        cache_key = self._get_cache_key('volume_data', symbols, period)
+        cached_result = self._get_from_cache(cache_key)
+        if cached_result is not None:
+            return cached_result
+            
         try:
             volume_data = {}
             
@@ -119,12 +199,23 @@ class DataFetcher:
                 '1Y': '1y'
             }
             
+            # Use intraday intervals for better real-time accuracy
+            interval_map = {
+                '1D': '5m',  # 5-minute intervals for 1 day
+                '5D': '15m', # 15-minute intervals for 5 days
+                '1M': '1h',  # 1-hour intervals for 1 month
+                '3M': '1d',  # Daily for 3 months
+                '6M': '1d',  # Daily for 6 months
+                '1Y': '1d'   # Daily for 1 year
+            }
+            
             yf_period = period_map.get(period, '1mo')
+            yf_interval = interval_map.get(period, '1d')
             
             for symbol in symbols:
                 try:
                     ticker = yf.Ticker(symbol)
-                    hist = ticker.history(period=yf_period)
+                    hist = ticker.history(period=yf_period, interval=yf_interval)
                     
                     if not hist.empty:
                         # Calculate volume metrics
@@ -140,17 +231,21 @@ class DataFetcher:
                     st.error(f"Error fetching volume data for {symbol}: {str(e)}")
                     continue
             
+            # Store in cache
+            self._store_in_cache(cache_key, volume_data)
             return volume_data
             
         except Exception as e:
             st.error(f"Error in get_volume_data: {str(e)}")
-            return {}
+            empty_result = {}
+            self._store_in_cache(cache_key, empty_result)
+            return empty_result
     
     def calculate_dark_pool_indicators(self, symbol):
         """Calculate dark pool activity indicators"""
         try:
             ticker = yf.Ticker(symbol)
-            hist = ticker.history(period='1mo')
+            hist = ticker.history(period='1mo', interval='1d')
             
             if hist.empty:
                 return {}
@@ -188,11 +283,11 @@ class DataFetcher:
         try:
             # Fetch VIX data as market fear gauge
             vix = yf.Ticker("^VIX")
-            vix_data = vix.history(period='5d')
+            vix_data = vix.history(period='5d', interval='1d')
             
             # Fetch Bitcoin price for correlation
             btc = yf.Ticker("BTC-USD")
-            btc_data = btc.history(period='5d')
+            btc_data = btc.history(period='5d', interval='1d')
             
             sentiment = {}
             

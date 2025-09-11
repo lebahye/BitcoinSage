@@ -2,15 +2,61 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 from datetime import datetime, timedelta
+import time
 
 class OptionsAnalyzer:
     """Analyzes options data for put-call ratios and volatility indicators"""
     
     def __init__(self):
         self.cache_duration = 300  # 5 minutes cache
+        self._cache = {}
+        self._cache_timestamps = {}
     
+    def _get_cache_key(self, method_name, *args):
+        """Generate stable cache key for method and arguments"""
+        # Create stable, sorted key that's not sensitive to argument order
+        stable_args = []
+        for arg in args:
+            if isinstance(arg, (list, tuple)):
+                # Sort lists/tuples for consistency
+                stable_args.append(str(sorted(str(item) for item in arg)))
+            else:
+                stable_args.append(str(arg))
+        
+        # Join with delimiter and use stable hash
+        key_string = f"{method_name}|{'^'.join(sorted(stable_args))}"
+        return f"{method_name}_{abs(hash(key_string))}"
+    
+    def _is_cache_valid(self, cache_key):
+        """Check if cached data is still valid"""
+        if cache_key not in self._cache_timestamps:
+            return False
+        return (time.time() - self._cache_timestamps[cache_key]) < self.cache_duration
+    
+    def _get_from_cache(self, cache_key):
+        """Get data from cache if valid"""
+        if self._is_cache_valid(cache_key):
+            return self._cache.get(cache_key)
+        return None
+    
+    def _store_in_cache(self, cache_key, data):
+        """Store data in cache with timestamp"""
+        self._cache[cache_key] = data
+        self._cache_timestamps[cache_key] = time.time()
+        
     def analyze_put_call_ratio(self, calls_df, puts_df):
-        """Calculate put-call ratio and related metrics"""
+        """Calculate put-call ratio and related metrics with caching"""
+        
+        # Generate cache key based on data content, not object ID
+        calls_hash = hash(str(calls_df.values.tobytes())) if calls_df is not None and not calls_df.empty else None
+        puts_hash = hash(str(puts_df.values.tobytes())) if puts_df is not None and not puts_df.empty else None
+        cache_key = self._get_cache_key('put_call_ratio', calls_hash, puts_hash)
+        
+        # Check cache first
+        cached_result = self._get_from_cache(cache_key)
+        if cached_result is not None:
+            return cached_result
+            
         try:
             if calls_df is None or puts_df is None or calls_df.empty or puts_df.empty:
                 return {
@@ -35,7 +81,7 @@ class OptionsAnalyzer:
             # Determine volatility signal
             volatility_signal = self._interpret_pc_ratio(pc_ratio_volume)
             
-            return {
+            result = {
                 'put_call_ratio': pc_ratio_volume,
                 'put_call_ratio_oi': pc_ratio_oi,
                 'call_volume': call_volume,
@@ -46,6 +92,10 @@ class OptionsAnalyzer:
                 'total_volume': call_volume + put_volume,
                 'total_oi': call_oi + put_oi
             }
+            
+            # Store result in cache
+            self._store_in_cache(cache_key, result)
+            return result
             
         except Exception as e:
             st.error(f"Error analyzing put-call ratio: {str(e)}")
@@ -164,24 +214,50 @@ class OptionsAnalyzer:
                 'deep_itm': 0
             }
             
-            all_options = pd.concat([calls_df, puts_df], ignore_index=True)
+            # Add type column to distinguish calls from puts before concat
+            calls_with_type = calls_df.copy() if calls_df is not None and not calls_df.empty else pd.DataFrame()
+            puts_with_type = puts_df.copy() if puts_df is not None and not puts_df.empty else pd.DataFrame()
             
-            for _, option in all_options.iterrows():
-                strike = option['strike']
-                volume = option['volume'] if not pd.isna(option['volume']) else 0
-                
-                moneyness = abs(strike - current_price) / current_price
-                
-                if moneyness > 0.2:
-                    distribution['deep_otm'] += volume
-                elif moneyness > 0.05:
-                    distribution['otm'] += volume
-                elif moneyness <= 0.05:
-                    distribution['atm'] += volume
-                elif strike < current_price * 0.95:  # ITM for calls or puts
-                    distribution['itm'] += volume
-                else:
-                    distribution['deep_itm'] += volume
+            if not calls_with_type.empty:
+                calls_with_type['option_type'] = 'call'
+            if not puts_with_type.empty:
+                puts_with_type['option_type'] = 'put'
+            
+            all_options = pd.concat([calls_with_type, puts_with_type], ignore_index=True)
+            
+            if not all_options.empty:
+                for _, option in all_options.iterrows():
+                    strike = option['strike']
+                    volume_val = option['volume']
+                    volume = volume_val if pd.notna(volume_val) else 0
+                    
+                    # Calculate moneyness properly for option type classification
+                    # Use the type column we added instead of unreliable strike lookup
+                    is_call = option.get('option_type') == 'call'
+                    
+                    if is_call:
+                        # Call option: ITM when strike < current_price
+                        itm = strike < current_price
+                    else:
+                        # Put option: ITM when strike > current_price  
+                        itm = strike > current_price
+                    
+                    if itm:
+                        # In-the-money: classify by distance
+                        distance = abs(strike - current_price) / current_price
+                        if distance > 0.1:
+                            distribution['deep_itm'] += volume
+                        else:
+                            distribution['itm'] += volume
+                    else:
+                        # Out-of-the-money: classify by distance
+                        distance = abs(strike - current_price) / current_price
+                        if distance <= 0.05:
+                            distribution['atm'] += volume
+                        elif distance <= 0.15:
+                            distribution['otm'] += volume
+                        else:
+                            distribution['deep_otm'] += volume
             
             return distribution
             

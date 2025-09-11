@@ -185,10 +185,21 @@ def main():
         st.error(f"An error occurred while fetching data: {str(e)}")
         st.info("Please check your internet connection and try again.")
     
-    # Auto-refresh functionality
+    # Auto-refresh functionality with 30-second gating
     if auto_refresh:
-        time.sleep(30)
-        st.rerun()
+        # Initialize session state for refresh tracking
+        if 'last_refresh' not in st.session_state:
+            st.session_state.last_refresh = time.time()
+        
+        # Check if 30 seconds have passed since last refresh
+        current_time = time.time()
+        if current_time - st.session_state.last_refresh >= 30:
+            st.session_state.last_refresh = current_time
+            st.rerun()
+        else:
+            # Display countdown until next refresh
+            time_until_refresh = 30 - (current_time - st.session_state.last_refresh)
+            st.sidebar.info(f"Next auto-refresh in {time_until_refresh:.0f}s")
 
 def render_technical_analysis(stock_data, selected_stocks, chart_builder):
     """Render technical analysis section"""
@@ -207,13 +218,13 @@ def render_technical_analysis(stock_data, selected_stocks, chart_builder):
                     # Price chart with moving averages
                     fig = chart_builder.create_candlestick_chart(symbol, stock_data)
                     if fig:
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width='stretch')
                 
                 with col2:
                     # Volume analysis
                     volume_fig = chart_builder.create_volume_chart(symbol, stock_data)
                     if volume_fig:
-                        st.plotly_chart(volume_fig, use_container_width=True)
+                        st.plotly_chart(volume_fig, width='stretch')
                 
                 # Technical indicators
                 st.subheader("Key Indicators")
