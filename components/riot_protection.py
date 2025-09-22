@@ -406,6 +406,11 @@ class RIOTProtection:
                         - Protects against 10-15% volatility swings
                         - Maintains exposure to moderate gains
                         - {"Generates income" if collar['net_cost'] < 0 else "Low cost protection"}
+                        
+                        **📊 Broker Instructions:**
+                        1. **Sell to Open:** 100 RIOT {call.get('expiration', 'Next Expiry')} ${collar['call_strike']} CALL
+                        2. **Buy to Open:** 100 RIOT {put.get('expiration', 'Next Expiry')} ${collar['put_strike']} PUT
+                        3. **Net Cost:** ${collar['net_cost']:.2f} per share ({collar['total_cost']:,.0f} total)
                         """)
             else:
                 st.warning("Insufficient options liquidity for collar strategies.")
