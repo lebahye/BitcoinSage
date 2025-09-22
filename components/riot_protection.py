@@ -23,7 +23,8 @@ class RIOTProtection:
         
         # Add Start Here wizard
         with st.expander("🚀 START HERE - Beginner's Guide", expanded=False):
-            self._render_start_here_wizard(current_price)
+            if current_price > 0:
+                self._render_start_here_wizard(current_price)
         
         st.info("💡 **No Cash Required!** All strategies use your existing shares to generate income or provide protection at zero cost.")
         
@@ -297,6 +298,12 @@ class RIOTProtection:
                     - **Yield:** {call['monthly_yield']:.2f}% monthly, {call['monthly_yield']*12:.1f}% annual
                     - **Call Away Price:** ${call['strike']:.2f} ({call['upside_cap']:.1f}% above current)
                     
+                    **📝 Broker Instructions:**
+                    1. **Action:** Sell to Open
+                    2. **Quantity:** 100 contracts
+                    3. **Option:** RIOT {call.get('expiration', 'Next Expiry')} ${call['strike']} CALL
+                    4. **Order Type:** Limit at ${call['lastPrice']:.2f} or better
+                    
                     **Why This Works:**
                     - You receive ${monthly_income:,.0f} immediately when you sell the calls
                     - If RIOT stays below ${call['strike']:.2f}, you keep premium + shares
@@ -318,6 +325,9 @@ class RIOTProtection:
         - Premium received = Premium paid = **ZERO NET COST**
         - Sometimes even generates net income!
         - Perfect collar protection without spending cash
+        
+        **📚 Beginner Explanation:**
+        Think of this like insurance that pays for itself! You sell the right to buy your shares at a higher price (call), and use that money to buy the right to sell your shares at a lower price (put). The premiums usually balance out, giving you protection for free!
         """)
         
         # Find suitable collar combinations
