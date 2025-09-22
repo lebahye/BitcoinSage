@@ -20,6 +20,11 @@ class RIOTProtection:
         """Render RIOT protection strategies interface"""
         st.title("🛡️ RIOT Share Protection Strategies")
         st.markdown("### Protecting Your 10,000 RIOT Shares WITHOUT CASH - Generate Income!")
+        
+        # Add Start Here wizard
+        with st.expander("🚀 START HERE - Beginner's Guide", expanded=False):
+            self._render_start_here_wizard(current_price)
+        
         st.info("💡 **No Cash Required!** All strategies use your existing shares to generate income or provide protection at zero cost.")
         
         # Display current position
@@ -72,6 +77,158 @@ class RIOTProtection:
         else:
             st.error("Unable to fetch real-time RIOT options data. Please try again.")
     
+    def _render_start_here_wizard(self, current_price):
+        """Beginner-friendly wizard to guide users through strategy selection"""
+        st.markdown("## 🎯 **Step-by-Step Guide for Beginners**")
+        
+        # Step 1: Understanding Your Position
+        st.markdown("### 📋 Step 1: Your Current Position")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown(f"""
+            **✅ What You Own:**
+            - **10,000 RIOT shares** 
+            - **Paid:** $18.22 per share
+            - **Total Investment:** $182,200
+            - **Current Value:** ${current_price * 10000:,.0f}
+            """)
+        
+        with col2:
+            pnl = (current_price - 18.22) * 10000
+            pnl_pct = ((current_price - 18.22) / 18.22) * 100
+            st.markdown(f"""
+            **📊 Current Status:**
+            - **Current Price:** ${current_price:.2f}
+            - **Profit/Loss:** ${pnl:,.0f} ({pnl_pct:+.1f}%)
+            - **Available Cash:** $0 (your constraint)
+            - **Goal:** Protection + Income without spending money
+            """)
+        
+        st.divider()
+        
+        # Step 2: Choose Your Goal
+        st.markdown("### 🎯 Step 2: What's Your Main Goal?")
+        
+        goal = st.radio(
+            "Pick your primary objective:",
+            ["💰 Generate Monthly Income", "🛡️ Protect Against Losses", "⚖️ Both Income and Protection"],
+            help="Choose what matters most to you right now"
+        )
+        
+        if goal == "💰 Generate Monthly Income":
+            st.success("""
+            **Perfect Choice!** Covered Calls are ideal for you:
+            - Generate $2,000-$8,000+ monthly income
+            - Keep all your shares (unless called away at profit)
+            - Zero cash required - use your existing shares
+            - **Next:** Go to the "💰 Covered Calls" tab above
+            """)
+            
+        elif goal == "🛡️ Protect Against Losses":
+            st.success("""
+            **Smart Approach!** You need a Zero-Cost Collar:
+            - Limit losses if RIOT drops 10-15%
+            - Still participate in moderate gains
+            - Zero cash required - premiums balance out
+            - **Next:** Go to the "🎯 Zero-Cost Collars" tab above
+            """)
+            
+        else:  # Both
+            st.success("""
+            **Best of Both Worlds!** Start with Covered Calls, then add protection:
+            1. **First:** Sell covered calls for income
+            2. **Then:** Use some income to buy protection
+            3. **Result:** Monthly income + downside protection
+            - **Next:** Go to "🛡️ Cash-Neutral Protection" tab above
+            """)
+        
+        st.divider()
+        
+        # Step 3: Key Terms Explained
+        st.markdown("### 📚 Step 3: Key Terms You Need to Know")
+        
+        term_col1, term_col2 = st.columns(2)
+        
+        with term_col1:
+            st.markdown("""
+            **🔑 Essential Terms:**
+            
+            **Call Option:** Right to BUY shares at a set price
+            - When you SELL calls, you get paid immediately
+            - You're giving someone else the right to buy your shares
+            
+            **Put Option:** Right to SELL shares at a set price  
+            - When you BUY puts, you pay for protection
+            - Protects you if stock price falls
+            
+            **Strike Price:** The set price in the option contract
+            - Calls: Price someone can buy your shares
+            - Puts: Price you can sell shares (floor protection)
+            """)
+        
+        with term_col2:
+            st.markdown("""
+            **💡 Strategy Basics:**
+            
+            **Covered Call:** Sell call options on shares you own
+            - ✅ Generate income immediately
+            - ⚠️ Cap your upside at strike price
+            
+            **Protective Put:** Buy put options for downside protection
+            - ✅ Limit your losses 
+            - ❌ Costs money upfront
+            
+            **Collar:** Sell calls + Buy puts = Zero cost
+            - ✅ Income from calls pays for puts
+            - ✅ Protection + Income with no cash needed
+            """)
+        
+        st.divider()
+        
+        # Step 4: Execution Guide
+        st.markdown("### 🚀 Step 4: How to Execute (Broker Instructions)")
+        
+        st.warning("""
+        **⚠️ Important:** Always paper trade first if you're new to options! 
+        
+        **For Your 10,000 Shares, You Need:**
+        - **100 contracts** for any strategy (each contract = 100 shares)
+        - **Example:** To sell covered calls on all shares = "Sell to Open 100 contracts"
+        """)
+        
+        exec_col1, exec_col2 = st.columns(2)
+        
+        with exec_col1:
+            st.markdown("""
+            **📞 Broker Order Example (Covered Call):**
+            1. **Action:** "Sell to Open"
+            2. **Quantity:** 100 contracts  
+            3. **Option:** RIOT Call [Expiry] [Strike]
+            4. **Type:** Limit order at desired price
+            5. **Duration:** Day or Good Till Canceled
+            """)
+        
+        with exec_col2:
+            st.markdown("""
+            **🔍 What to Look For:**
+            - **Volume > 100:** Ensures you can trade easily
+            - **Tight Bid-Ask Spread:** Better pricing
+            - **30-45 Days to Expiry:** Sweet spot for premiums
+            - **Strike 5-15% Above Current:** Good risk/reward
+            """)
+        
+        st.info("""
+        **🎯 Ready to Start?** 
+        1. Choose your goal above
+        2. Go to the recommended tab  
+        3. Find a strategy you like
+        4. Paper trade it first
+        5. Execute when comfortable
+        
+        **Remember:** You can always ask questions or start small with fewer contracts!
+        """)
+    
     def _render_covered_calls(self, calls_df, current_price):
         """Render covered calls strategy - NO CASH REQUIRED"""
         st.subheader("💰 Covered Call Strategy - GENERATE INCOME!")
@@ -100,9 +257,10 @@ class RIOTProtection:
             
             # Calculate income potential and upside caps
             relevant_calls['upside_cap'] = ((relevant_calls['strike'] / current_price) - 1) * 100
-            relevant_calls['total_income'] = relevant_calls['lastPrice'] * 100  # 100 shares per contract = 100 contracts for 10k shares
+            relevant_calls['total_income'] = relevant_calls['lastPrice'] * 10000  # Income for all 10,000 shares (100 contracts)
             relevant_calls['income_per_share'] = relevant_calls['lastPrice']
             relevant_calls['monthly_yield'] = (relevant_calls['income_per_share'] / current_price) * 100
+            relevant_calls['contracts_needed'] = 100  # 100 contracts for 10,000 shares
             
             # Display top recommendations
             display_calls = relevant_calls.sort_values('volume', ascending=False).head(5)
@@ -118,7 +276,7 @@ class RIOTProtection:
                     
                     with col2:
                         st.metric("Total Income", f"${call['total_income']:,.0f}")
-                        st.metric("Expiration", call.get('expiration', 'Next Expiry'))
+                        st.metric("Contracts to Sell", "100 contracts")
                     
                     with col3:
                         st.metric("Monthly Yield", f"{call['monthly_yield']:.2f}%")
@@ -126,7 +284,7 @@ class RIOTProtection:
                     
                     with col4:
                         st.metric("Upside Cap", f"{call['upside_cap']:.1f}%")
-                        st.metric("Implied Vol", f"{call.get('impliedVolatility', 0)*100:.1f}%")
+                        st.metric("Expiration", call.get('expiration', 'Next Expiry'))
                     
                     # Calculate income scenarios
                     monthly_income = call['total_income']
@@ -191,7 +349,7 @@ class RIOTProtection:
                             'put_premium': put['lastPrice'],
                             'call_premium': call['lastPrice'],
                             'net_cost': net_cost,
-                            'total_cost': net_cost * self.user_position['shares'] * 100,
+                            'total_cost': net_cost * self.user_position['shares'],  # Cost for 10,000 shares
                             'protection_level': ((put['strike'] / current_price) - 1) * 100,
                             'upside_cap': ((call['strike'] / current_price) - 1) * 100
                         })
