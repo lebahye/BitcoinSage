@@ -105,58 +105,61 @@ class RIOTProtection:
             relevant_calls['monthly_yield'] = (relevant_calls['income_per_share'] / current_price) * 100
             
             # Display top recommendations
-            display_puts = relevant_puts.sort_values('volume', ascending=False).head(5)
+            display_calls = relevant_calls.sort_values('volume', ascending=False).head(5)
             
-            for idx, put in display_puts.iterrows():
-                with st.expander(f"PUT ${put['strike']} - {put['protection_level']:.1f}% Protection", 
+            for idx, call in display_calls.iterrows():
+                with st.expander(f"CALL ${call['strike']} - {call['upside_cap']:.1f}% Above Current", 
                                expanded=True):
                     col1, col2, col3, col4 = st.columns(4)
                     
                     with col1:
-                        st.metric("Strike Price", f"${put['strike']}")
-                        st.metric("Premium", f"${put['lastPrice']:.2f}")
+                        st.metric("Strike Price", f"${call['strike']}")
+                        st.metric("Premium (YOU GET)", f"${call['lastPrice']:.2f}")
                     
                     with col2:
-                        st.metric("Total Cost", f"${put['total_cost']:,.0f}")
-                        st.metric("Expiration", put.get('expiration', 'Next Expiry'))
+                        st.metric("Total Income", f"${call['total_income']:,.0f}")
+                        st.metric("Expiration", call.get('expiration', 'Next Expiry'))
                     
                     with col3:
-                        st.metric("Max Loss Protected", f"${(current_price - put['strike']) * self.user_position['shares']:,.0f}")
-                        st.metric("Volume", f"{put['volume']:,.0f}")
+                        st.metric("Monthly Yield", f"{call['monthly_yield']:.2f}%")
+                        st.metric("Volume", f"{call['volume']:,.0f}")
                     
                     with col4:
-                        st.metric("Annual Cost %", f"{put['annual_cost_pct']:.2f}%")
-                        st.metric("Implied Vol", f"{put.get('impliedVolatility', 0)*100:.1f}%")
+                        st.metric("Upside Cap", f"{call['upside_cap']:.1f}%")
+                        st.metric("Implied Vol", f"{call.get('impliedVolatility', 0)*100:.1f}%")
                     
-                    # Calculate breakeven and scenarios
-                    breakeven = current_price - put['lastPrice']
+                    # Calculate income scenarios
+                    monthly_income = call['total_income']
+                    annual_income = monthly_income * 12
                     
                     st.markdown(f"""
-                    **Strategy Details:**
-                    - **Protection Level:** {put['protection_level']:.1f}% below current price
-                    - **Breakeven Price:** ${breakeven:.2f}
-                    - **Max Protected Loss:** ${(current_price - put['strike']) * self.user_position['shares']:,.0f}
-                    - **Insurance Cost:** ${put['total_cost']:,.0f} ({put['annual_cost_pct']:.2f}% of position)
+                    **Covered Call Details:**
+                    - **Monthly Income:** ${monthly_income:,.0f} (if not called away)
+                    - **Annual Income:** ${annual_income:,.0f} potential
+                    - **Yield:** {call['monthly_yield']:.2f}% monthly, {call['monthly_yield']*12:.1f}% annual
+                    - **Call Away Price:** ${call['strike']:.2f} ({call['upside_cap']:.1f}% above current)
                     
                     **Why This Works:**
-                    - If RIOT drops below ${put['strike']}, put gains value to offset share losses
-                    - Your maximum loss is limited to ${(self.user_position['cost_basis'] - put['strike']) * self.user_position['shares']:,.0f} plus premium
-                    - You keep all upside participation above ${breakeven:.2f}
+                    - You receive ${monthly_income:,.0f} immediately when you sell the calls
+                    - If RIOT stays below ${call['strike']:.2f}, you keep premium + shares
+                    - If RIOT rises above ${call['strike']:.2f}, shares sold at profit + you keep premium
+                    - **NO CASH REQUIRED** - generates income from your existing position!
                     """)
         else:
-            st.warning("No suitable protective puts found. Market may be closed or low liquidity.")
+            st.warning("No suitable covered calls found. Market may be closed or low liquidity.")
     
-    def _render_collar_strategy(self, calls_df, puts_df, current_price):
-        """Render collar strategy (protective put + covered call)"""
-        st.subheader("🎯 Collar Strategy")
+    def _render_zero_cost_collars(self, calls_df, puts_df, current_price):
+        """Render zero-cost collar strategy"""
+        st.subheader("🎯 Zero-Cost Collar Strategy")
         st.markdown("""
-        **Strategy:** Combine protective puts with covered calls to reduce cost.
+        **Strategy:** ZERO-COST protection by balancing call sales with put purchases.
         
-        **How it works:**
-        - Buy protective puts (downside protection)
-        - Sell covered calls (generate income, limited upside)
-        - Net cost is lower than puts alone
-        - Creates a "collar" around your position
+        **How it works - NO CASH REQUIRED:**
+        - **SELL call options** (receive premium)
+        - **BUY put options** (downside protection)  
+        - Premium received = Premium paid = **ZERO NET COST**
+        - Sometimes even generates net income!
+        - Perfect collar protection without spending cash
         """)
         
         # Find suitable collar combinations
@@ -239,7 +242,7 @@ class RIOTProtection:
             else:
                 st.warning("Insufficient options liquidity for collar strategies.")
     
-    def _render_scenario_analysis(self, current_price):
+    def _render_original_scenario_analysis(self, current_price):
         """Render profit/loss scenario analysis"""
         st.subheader("📊 Scenario Analysis")
         st.markdown("### See how different strategies perform across price scenarios")
@@ -298,8 +301,10 @@ class RIOTProtection:
             height=500
         )
         
-        fig.update_yaxis(tickformat='$,.0f')
-        fig.update_xaxis(tickformat='$,.2f')
+        fig.update_layout(
+            yaxis=dict(tickformat='$,.0f'),
+            xaxis=dict(tickformat='$,.2f')
+        )
         
         st.plotly_chart(fig, use_container_width=True)
         
@@ -350,7 +355,46 @@ class RIOTProtection:
             """)
         
         st.info("""
-        **💡 For your specific situation:** With 10,000 shares and belief in long-term growth through mid-2026, 
-        protective puts are ideal. They let you sleep better during the inevitable 10-15% swings while keeping 
-        all the upside when RIOT moves higher. Consider rolling the puts quarterly to maintain protection.
+        **💡 For your specific situation:** With 10,000 shares and NO CASH, start with covered calls to generate 
+        income, then use zero-cost collars for protection. This approach maximizes your returns while protecting downside.
+        """)
+    
+    def _render_cash_neutral_protection(self, calls_df, puts_df, current_price):
+        """Render cash-neutral protection strategies"""
+        st.subheader("🛡️ Cash-Neutral Protection Strategies")
+        st.markdown("""
+        **Perfect for NO CASH situations:** These strategies protect your position without requiring upfront money.
+        """)
+        
+        st.markdown("### 💰 1. Covered Call Income Generation")
+        st.success("Start here: Generate $2,000-$5,000+ monthly income from your shares")
+        
+        st.markdown("### 🛡️ 2. Zero-Cost Collar Protection")
+        st.info("Use covered call income to fund protective puts, or find zero-cost combinations")
+        
+        st.markdown("### 🔄 3. Rolling Strategy")
+        st.info("Roll covered calls monthly to maximize income while maintaining flexibility")
+    
+    def _render_income_scenarios(self, current_price):
+        """Render income scenario analysis"""
+        st.subheader("📊 Income Generation Scenarios")
+        st.markdown("### Monthly Income Potential from Your 10,000 RIOT Shares")
+        
+        # Sample income scenarios
+        scenarios = [
+            {"Strategy": "Conservative Covered Calls", "Monthly Income": "$2,000-$3,000", "Annual": "$24,000-$36,000", "Risk": "Low"},
+            {"Strategy": "Moderate Covered Calls", "Monthly Income": "$3,000-$5,000", "Annual": "$36,000-$60,000", "Risk": "Medium"},
+            {"Strategy": "Aggressive Covered Calls", "Monthly Income": "$5,000-$8,000", "Annual": "$60,000-$96,000", "Risk": "High"}
+        ]
+        
+        import pandas as pd
+        scenarios_df = pd.DataFrame(scenarios)
+        st.dataframe(scenarios_df, use_container_width=True)
+        
+        st.success("""
+        **🎯 Recommended Approach:**
+        1. Start with conservative covered calls (2-4% out-of-the-money)
+        2. Generate $24,000-$36,000 annually without risking share ownership
+        3. Use income to fund protective strategies when needed
+        4. Scale up based on market conditions and your comfort level
         """)
