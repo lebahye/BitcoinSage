@@ -218,7 +218,7 @@ def render_technical_analysis(stock_data, selected_stocks, chart_builder):
                     # Price chart with moving averages
                     fig = chart_builder.create_candlestick_chart(symbol, stock_data)
                     if fig:
-                        st.plotly_chart(fig, width='stretch')
+                        st.plotly_chart(fig, use_container_width=True)
                 
                 with col2:
                     # Volume analysis
