@@ -19,7 +19,8 @@ class RIOTProtection:
     def render(self, data_fetcher, options_analyzer):
         """Render RIOT protection strategies interface"""
         st.title("🛡️ RIOT Share Protection Strategies")
-        st.markdown("### Protecting Your 10,000 RIOT Shares Without Selling")
+        st.markdown("### Protecting Your 10,000 RIOT Shares WITHOUT CASH - Generate Income!")
+        st.info("💡 **No Cash Required!** All strategies use your existing shares to generate income or provide protection at zero cost.")
         
         # Display current position
         col1, col2, col3 = st.columns(3)
@@ -49,52 +50,59 @@ class RIOTProtection:
         calls_df, puts_df = data_fetcher.get_options_data('RIOT')
         
         if calls_df is not None and puts_df is not None and not puts_df.empty:
-            # Protection strategy tabs
-            prot_tab1, prot_tab2, prot_tab3 = st.tabs([
-                "🛡️ Protective Puts", 
-                "🎯 Collar Strategy", 
-                "📊 Scenario Analysis"
+            # Protection strategy tabs - NO CASH REQUIRED
+            prot_tab1, prot_tab2, prot_tab3, prot_tab4 = st.tabs([
+                "💰 Covered Calls", 
+                "🎯 Zero-Cost Collars", 
+                "🛡️ Cash-Neutral Protection",
+                "📊 Income Scenarios"
             ])
             
             with prot_tab1:
-                self._render_protective_puts(puts_df, current_price)
+                self._render_covered_calls(calls_df, current_price)
             
             with prot_tab2:
-                self._render_collar_strategy(calls_df, puts_df, current_price)
+                self._render_zero_cost_collars(calls_df, puts_df, current_price)
             
             with prot_tab3:
-                self._render_scenario_analysis(current_price)
+                self._render_cash_neutral_protection(calls_df, puts_df, current_price)
+            
+            with prot_tab4:
+                self._render_income_scenarios(current_price)
         else:
             st.error("Unable to fetch real-time RIOT options data. Please try again.")
     
-    def _render_protective_puts(self, puts_df, current_price):
-        """Render protective puts strategy"""
-        st.subheader("🛡️ Protective Put Strategy")
+    def _render_covered_calls(self, calls_df, current_price):
+        """Render covered calls strategy - NO CASH REQUIRED"""
+        st.subheader("💰 Covered Call Strategy - GENERATE INCOME!")
         st.markdown("""
-        **Strategy:** Buy put options to protect against downside while keeping your shares.
+        **Strategy:** Sell call options against your existing shares to generate immediate income.
         
-        **How it works:**
+        **How it works - NO CASH NEEDED:**
         - Keep all 10,000 RIOT shares
-        - Buy put options as insurance
-        - If RIOT drops, puts gain value to offset losses
-        - If RIOT rises, you profit from shares (minus put premium)
+        - **SELL call options** (you receive premium immediately)
+        - Generate monthly income while holding shares
+        - If RIOT stays below strike, keep premium + shares
+        - If RIOT rises above strike, shares may be called away at profit
+        
+        **Perfect for your situation:** Generate income without any upfront cost!
         """)
         
-        # Filter relevant puts (near current price, good liquidity)
-        relevant_puts = puts_df[
-            (puts_df['strike'] >= current_price * 0.8) & 
-            (puts_df['strike'] <= current_price * 1.1) &
-            (puts_df['volume'] > 0)
+        # Filter relevant calls for covered call writing (above current price)
+        relevant_calls = calls_df[
+            (calls_df['strike'] >= current_price * 1.02) & 
+            (calls_df['strike'] <= current_price * 1.20) &
+            (calls_df['volume'] > 0)
         ].copy()
         
-        if not relevant_puts.empty:
-            st.markdown("### 🎯 Recommended Protective Put Options")
+        if not relevant_calls.empty:
+            st.markdown("### 💰 Recommended Covered Call Options - IMMEDIATE INCOME")
             
-            # Calculate protection levels and costs
-            relevant_puts['protection_level'] = ((relevant_puts['strike'] / current_price) - 1) * 100
-            relevant_puts['total_cost'] = relevant_puts['lastPrice'] * self.user_position['shares'] * 100  # 100 shares per contract
-            relevant_puts['cost_per_share'] = relevant_puts['lastPrice']
-            relevant_puts['annual_cost_pct'] = (relevant_puts['cost_per_share'] / current_price) * 100
+            # Calculate income potential and upside caps
+            relevant_calls['upside_cap'] = ((relevant_calls['strike'] / current_price) - 1) * 100
+            relevant_calls['total_income'] = relevant_calls['lastPrice'] * 100  # 100 shares per contract = 100 contracts for 10k shares
+            relevant_calls['income_per_share'] = relevant_calls['lastPrice']
+            relevant_calls['monthly_yield'] = (relevant_calls['income_per_share'] / current_price) * 100
             
             # Display top recommendations
             display_puts = relevant_puts.sort_values('volume', ascending=False).head(5)
