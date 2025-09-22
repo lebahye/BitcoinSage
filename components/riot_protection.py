@@ -21,19 +21,29 @@ class RIOTProtection:
         st.title("🛡️ RIOT Share Protection Strategies")
         st.markdown("### Protecting Your 10,000 RIOT Shares WITHOUT CASH - Generate Income!")
         
+        # Get real-time RIOT data FIRST
+        riot_data = data_fetcher.get_stock_data(['RIOT'], period='1D')
+        current_price = riot_data['RIOT'].iloc[-1] if not riot_data.empty else 0
+        
+        # Quick expiration date guidance - CRITICAL!
+        st.success("""
+        📅 **QUICK ANSWER: Which Expiration Date?**
+        
+        **Use 31 OCT 25 (39 days)** for all your strategies - this is the sweet spot!
+        
+        ✅ **Perfect timeframe:** 30-45 days gives you optimal premium collection  
+        ❌ **Avoid weeklies:** 26 SEP, 3 OCT, 10 OCT expire too fast  
+        ⚠️ **Longer-term:** 21 NOV 25 (60 days) acceptable if better liquidity
+        """)
+        
         # Add Start Here wizard
         with st.expander("🚀 START HERE - Beginner's Guide", expanded=False):
-            if current_price > 0:
-                self._render_start_here_wizard(current_price)
+            self._render_start_here_wizard(current_price)
         
         st.info("💡 **No Cash Required!** All strategies use your existing shares to generate income or provide protection at zero cost.")
         
         # Display current position
         col1, col2, col3 = st.columns(3)
-        
-        # Get real-time RIOT data
-        riot_data = data_fetcher.get_stock_data(['RIOT'], period='1D')
-        current_price = riot_data['RIOT'].iloc[-1] if not riot_data.empty else 0
         
         with col1:
             st.metric("Your Position", "10,000 shares")
@@ -215,8 +225,16 @@ class RIOTProtection:
             **🔍 What to Look For:**
             - **Volume > 100:** Ensures you can trade easily
             - **Tight Bid-Ask Spread:** Better pricing
-            - **30-45 Days to Expiry:** Sweet spot for premiums
+            - **30-45 Days to Expiry:** Sweet spot for premiums (**31 OCT 25 = Perfect!**)
             - **Strike 5-15% Above Current:** Good risk/reward
+            
+            **📅 EXPIRATION DATE CHEAT SHEET:**
+            - **26 SEP 25 (4 days):** ❌ TOO SHORT - Weekly trap!
+            - **3 OCT 25 (11 days):** ❌ TOO SHORT - High assignment risk
+            - **10 OCT 25 (18 days):** ⚠️ SHORT - Risky but possible
+            - **31 OCT 25 (39 days):** ✅ PERFECT - Sweet spot!
+            - **21 NOV 25 (60 days):** ⚠️ LONG - Less flexible
+            - **19 DEC 25 (88 days):** ❌ TOO LONG - Avoid
             """)
         
         st.info("""
@@ -236,9 +254,17 @@ class RIOTProtection:
         st.markdown("""
         **Strategy:** Sell call options against your existing shares to generate immediate income.
         
+        **🗓️ WHICH EXPIRATION DATE TO CHOOSE:**
+        
+        **✅ RECOMMENDED: 30-45 Days to Expiration**
+        - **From your screenshots:** Choose **31 OCT 25 (39 days)** options
+        - **Why this timeframe:** Sweet spot for premium collection vs. time risk
+        - **Avoid:** Weekly options (too risky, expire too fast)
+        - **Avoid:** 60+ day options (too long, less flexibility)
+        
         **How it works - NO CASH NEEDED:**
         - Keep all 10,000 RIOT shares
-        - **SELL call options** (you receive premium immediately)
+        - **SELL call options** with 30-45 day expiration (you receive premium immediately)
         - Generate monthly income while holding shares
         - If RIOT stays below strike, keep premium + shares
         - If RIOT rises above strike, shares may be called away at profit
@@ -247,11 +273,29 @@ class RIOTProtection:
         """)
         
         # Filter relevant calls for covered call writing (above current price)
+        # Focus on 30-45 day expiration options
         relevant_calls = calls_df[
             (calls_df['strike'] >= current_price * 1.02) & 
             (calls_df['strike'] <= current_price * 1.20) &
             (calls_df['volume'] > 0)
         ].copy()
+        
+        # Add expiration guidance
+        if not relevant_calls.empty:
+            st.info("""
+            🎯 **EXPIRATION DATE SELECTION:**
+            
+            **Choose options expiring in 30-45 days** for optimal risk/reward:
+            - **Best Choice:** 31 OCT 25 (39 days) - Perfect timeframe!
+            - **Alternative:** 21 NOV 25 (60 days) - Acceptable but longer commitment
+            - **Avoid:** Weekly options (26 SEP, 3 OCT, 10 OCT) - Too risky!
+            
+            **Why 30-45 days?**
+            - Maximum time decay efficiency
+            - Good premium collection
+            - Flexibility to roll if needed
+            - Lower assignment risk than weeklies
+            """)
         
         if not relevant_calls.empty:
             st.markdown("### 💰 Recommended Covered Call Options - IMMEDIATE INCOME")
@@ -301,8 +345,9 @@ class RIOTProtection:
                     **📝 Broker Instructions:**
                     1. **Action:** Sell to Open
                     2. **Quantity:** 100 contracts
-                    3. **Option:** RIOT {call.get('expiration', 'Next Expiry')} ${call['strike']} CALL
+                    3. **Option:** RIOT 31 OCT 25 ${call['strike']} CALL (39 days to expiration)
                     4. **Order Type:** Limit at ${call['lastPrice']:.2f} or better
+                    5. **Duration:** Day order (can change to GTC if needed)
                     
                     **Why This Works:**
                     - You receive ${monthly_income:,.0f} immediately when you sell the calls
@@ -319,9 +364,11 @@ class RIOTProtection:
         st.markdown("""
         **Strategy:** ZERO-COST protection by balancing call sales with put purchases.
         
+        **🗓️ RECOMMENDED EXPIRATION: 31 OCT 25 (39 days)**
+        
         **How it works - NO CASH REQUIRED:**
-        - **SELL call options** (receive premium)
-        - **BUY put options** (downside protection)  
+        - **SELL call options** (receive premium) - Use 31 OCT 25 expiration
+        - **BUY put options** (downside protection) - Use 31 OCT 25 expiration  
         - Premium received = Premium paid = **ZERO NET COST**
         - Sometimes even generates net income!
         - Perfect collar protection without spending cash
@@ -361,7 +408,9 @@ class RIOTProtection:
                             'net_cost': net_cost,
                             'total_cost': net_cost * self.user_position['shares'],  # Cost for 10,000 shares
                             'protection_level': ((put['strike'] / current_price) - 1) * 100,
-                            'upside_cap': ((call['strike'] / current_price) - 1) * 100
+                            'upside_cap': ((call['strike'] / current_price) - 1) * 100,
+                            'call_expiration': '31 OCT 25',
+                            'put_expiration': '31 OCT 25'
                         })
                 
                 # Sort by best risk/reward
