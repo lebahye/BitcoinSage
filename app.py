@@ -16,6 +16,7 @@ from components.enhanced_technical import EnhancedTechnical
 from components.sentiment_analysis import SentimentAnalysis
 from components.risk_management import RiskManagement
 from components.options_evaluator import OptionsEvaluator
+from components.riot_protection import RIOTProtection
 
 # Page configuration
 st.set_page_config(
@@ -112,7 +113,7 @@ def main():
         st.rerun()
     
     # Main dashboard tabs - Enhanced with new analytical components
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
         "📊 Stock Overview", 
         "⚡ Options Flow", 
         "🌊 Dark Pool Activity", 
@@ -121,7 +122,8 @@ def main():
         "📰 Sentiment Analysis", 
         "⚠️ Risk Management",
         "🔮 Market Outlook",
-        "🎯 Options Evaluator"
+        "🎯 Options Evaluator",
+        "🛡️ RIOT Protection"
     ])
     
     if not selected_stocks:
@@ -180,6 +182,11 @@ def main():
         with tab9:
             options_evaluator = OptionsEvaluator()
             options_evaluator.render(selected_stocks, options_analyzer, chart_builder)
+        
+        # Tab 10: RIOT Protection Strategies
+        with tab10:
+            riot_protection = RIOTProtection()
+            riot_protection.render(data_fetcher, options_analyzer)
             
     except Exception as e:
         st.error(f"An error occurred while fetching data: {str(e)}")
