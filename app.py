@@ -18,6 +18,7 @@ from components.risk_management import RiskManagement
 from components.options_evaluator import OptionsEvaluator
 from components.riot_protection import RIOTProtection
 from components.polymarket_tracker import PolymarketTracker
+from components.personal_portfolio import PersonalPortfolio
 
 # Page configuration
 st.set_page_config(
@@ -114,7 +115,7 @@ def main():
         st.rerun()
     
     # Main dashboard tabs - Enhanced with new analytical components
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
         "📊 Stock Overview", 
         "⚡ Options Flow", 
         "🌊 Dark Pool Activity", 
@@ -125,7 +126,8 @@ def main():
         "🔮 Market Outlook",
         "🎯 Options Evaluator",
         "🛡️ RIOT Protection",
-        "🎲 Mining Prediction Markets"
+        "🎲 Mining Prediction Markets",
+        "🏆 Your Portfolio"
     ])
     
     if not selected_stocks:
@@ -194,6 +196,11 @@ def main():
         with tab11:
             polymarket_tracker = PolymarketTracker()
             polymarket_tracker.render()
+        
+        # Tab 12: Personal Portfolio
+        with tab12:
+            personal_portfolio = PersonalPortfolio()
+            personal_portfolio.render(data_fetcher, options_analyzer)
             
     except Exception as e:
         st.error(f"An error occurred while fetching data: {str(e)}")
