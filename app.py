@@ -19,7 +19,7 @@ from components.options_evaluator import OptionsEvaluator
 from components.riot_protection import RIOTProtection
 from components.polymarket_tracker import PolymarketTracker
 from components.personal_portfolio import PersonalPortfolio
-from components.chart_interpretation import ChartInterpretation
+from components.volatility_hole_chart import VolatilityHoleChart
 
 # Page configuration
 st.set_page_config(
@@ -129,7 +129,7 @@ def main():
         "🛡️ RIOT Protection",
         "🎲 Mining Prediction Markets",
         "🏆 Your Portfolio",
-        "📊 Chart Interpretation"
+        "🕳️ Volatility Hole"
     ])
     
     if not selected_stocks:
@@ -204,15 +204,24 @@ def main():
             personal_portfolio = PersonalPortfolio()
             personal_portfolio.render(data_fetcher, options_analyzer)
         
-        # Tab 13: Professional Chart Interpretation
+        # Tab 13: Volatility Hole Chart (Danny Cheng's Favorite Indicator)
         with tab13:
-            chart_interpreter = ChartInterpretation()
-            st.title("📊 Professional Chart Interpretation")
-            st.markdown("### Technical Analysis Like the Pros - Plain-English Explanations")
+            volatility_hole = VolatilityHoleChart()
+            
+            st.title("🕳️ Volatility Hole Indicator")
+            st.markdown("### Danny Cheng's Favorite - Spots Low Volatility Before Major Moves")
+            
+            st.info("""
+            **What You'll See:**
+            - 🟡 **Yellow lines** = Volatility holes (consolidation zones)  
+            - 🔥 **Breakout markers** = When the hole releases (up or down)  
+            - 📊 **Volatility score** = Below 25 = hole forming, Above 75 = breakout  
+            - 📊 **Momentum bars** = Green/red showing price direction
+            """)
             
             for symbol in selected_stocks:
-                with st.expander(f"📈 {symbol} Analysis", expanded=True if symbol == 'RIOT' else False):
-                    chart_interpreter.render(symbol, stock_data, data_fetcher)
+                with st.expander(f"📈 {symbol} - Volatility Hole Analysis", expanded=True if symbol == 'RIOT' else False):
+                    volatility_hole.render(symbol, data_fetcher)
             
     except Exception as e:
         st.error(f"An error occurred while fetching data: {str(e)}")
