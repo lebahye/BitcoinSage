@@ -19,6 +19,7 @@ from components.options_evaluator import OptionsEvaluator
 from components.riot_protection import RIOTProtection
 from components.polymarket_tracker import PolymarketTracker
 from components.personal_portfolio import PersonalPortfolio
+from components.chart_interpretation import ChartInterpretation
 
 # Page configuration
 st.set_page_config(
@@ -115,7 +116,7 @@ def main():
         st.rerun()
     
     # Main dashboard tabs - Enhanced with new analytical components
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13 = st.tabs([
         "📊 Stock Overview", 
         "⚡ Options Flow", 
         "🌊 Dark Pool Activity", 
@@ -127,7 +128,8 @@ def main():
         "🎯 Options Evaluator",
         "🛡️ RIOT Protection",
         "🎲 Mining Prediction Markets",
-        "🏆 Your Portfolio"
+        "🏆 Your Portfolio",
+        "📊 Chart Interpretation"
     ])
     
     if not selected_stocks:
@@ -201,6 +203,16 @@ def main():
         with tab12:
             personal_portfolio = PersonalPortfolio()
             personal_portfolio.render(data_fetcher, options_analyzer)
+        
+        # Tab 13: Professional Chart Interpretation
+        with tab13:
+            chart_interpreter = ChartInterpretation()
+            st.title("📊 Professional Chart Interpretation")
+            st.markdown("### Technical Analysis Like the Pros - Plain-English Explanations")
+            
+            for symbol in selected_stocks:
+                with st.expander(f"📈 {symbol} Analysis", expanded=True if symbol == 'RIOT' else False):
+                    chart_interpreter.render(symbol, stock_data, data_fetcher)
             
     except Exception as e:
         st.error(f"An error occurred while fetching data: {str(e)}")
