@@ -383,10 +383,14 @@ class RiskDashboard:
         st.subheader("📈 Beta Analysis vs Bitcoin")
         st.write("**Beta > 1** = More volatile than Bitcoin | **Beta < 1** = Less volatile")
         
-        beta_data = self.risk_engine.calculate_beta_analysis(selected_stocks, benchmark='BTC-USD')
+        beta_data = self.risk_engine.calculate_beta_analysis(selected_stocks, benchmark='BTC-USD', period='1y')
         
         if not beta_data or not beta_data.get('beta_results'):
-            st.warning("Unable to calculate beta analysis")
+            st.info("Trying shorter time period (3 months) for beta calculation...")
+            beta_data = self.risk_engine.calculate_beta_analysis(selected_stocks, benchmark='BTC-USD', period='3mo')
+        
+        if not beta_data or not beta_data.get('beta_results'):
+            st.warning("Unable to calculate beta analysis - insufficient data overlap between stocks and Bitcoin")
             return
         
         col1, col2 = st.columns(2)
