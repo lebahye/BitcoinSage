@@ -28,7 +28,7 @@ The application implements specialized analyzer classes for different types of f
 - **OptionsAnalyzer**: Calculates put-call ratios, volatility signals, and options flow metrics
 - **ChartBuilder**: Creates interactive financial charts using Plotly with customizable indicators
 - **Dark Pool Analysis**: Identifies unusual volume patterns and institutional activity
-- **AdvancedTA (NEW)**: Professional-grade technical analysis library featuring:
+- **AdvancedTA**: Professional-grade technical analysis library featuring:
   - **Volume Profile (Market Profile)**: Identifies institutional price levels and high-volume nodes (POC)
   - **Anchored VWAP**: Tracks institutional entry/exit efficiency from key dates
   - **Ichimoku Cloud**: Complete trend-following system with multiple confirmation signals
@@ -36,6 +36,15 @@ The application implements specialized analyzer classes for different types of f
   - **Market Breadth**: Sector-wide strength analysis (Advance-Decline metrics)
   - **Money Flow Index (MFI)**: Volume-weighted RSI for buying/selling pressure
   - **Elder Ray Index**: Bull/Bear power analysis relative to EMA
+
+- **BacktestingEngine**: Strategy validation framework for historical performance testing:
+  - **MA Crossover Strategy**: Dual moving average crossover signals (configurable short/long windows)
+  - **RSI Mean Reversion**: Oversold/overbought level trading (configurable periods and thresholds)
+  - **Volume Breakout**: High-volume breakout detection (configurable threshold multiplier)
+  - **Momentum Strategy**: Price momentum trading (configurable lookback periods)
+  - **Performance Metrics**: CAGR, Sharpe ratio, max drawdown, win rate, trade count
+  - **Strategy Comparison**: Run all strategies simultaneously to identify best performers
+  - **Trade Pairing**: Accurate profit/loss calculation by properly pairing BUY/SELL trades
 
 This modular approach allows for easy extension of analytical capabilities and maintains separation of concerns between data processing and visualization.
 

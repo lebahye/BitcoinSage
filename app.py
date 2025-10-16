@@ -13,7 +13,7 @@ from components.options_dashboard import OptionsDashboard
 from components.dark_pool_tracker import DarkPoolTracker
 from components.weekly_outlook import WeeklyOutlook
 from components.enhanced_technical import EnhancedTechnical
-from components.sentiment_analysis import SentimentAnalysis
+from components.sentiment_dashboard import SentimentDashboard
 from components.risk_management import RiskManagement
 from components.options_evaluator import OptionsEvaluator
 from components.riot_protection import RIOTProtection
@@ -186,10 +186,10 @@ def main():
             pro_options = ProOptionsDashboard()
             pro_options.render(selected_stocks, MINING_STOCKS)
         
-        # Tab 8: Sentiment Analysis
+        # Tab 8: News Sentiment Analysis (Alpha Vantage powered)
         with tab8:
-            sentiment_analysis = SentimentAnalysis()
-            sentiment_analysis.render(selected_stocks, MINING_STOCKS)
+            sentiment_dashboard = SentimentDashboard()
+            sentiment_dashboard.render(list(MINING_STOCKS.keys()))
         
         # Tab 9: Risk Management (Professional)
         with tab9:
