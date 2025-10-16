@@ -4,6 +4,7 @@ import numpy as np
 from datetime import datetime, timedelta
 import requests
 import streamlit as st
+from utils.schwab_fetcher import SchwabDataFetcher
 
 class DataFetcher:
     """Handles all data fetching operations for stocks and market data"""
@@ -17,6 +18,10 @@ class DataFetcher:
         self._cache = {}
         self._cache_timestamps = {}
         self.cache_duration = 30  # 30 second cache for real-time updates
+        
+        # Initialize Schwab API for real-time data
+        self.schwab = SchwabDataFetcher()
+        self.using_schwab = self.schwab.is_available()
     
     def _get_cache_key(self, method_name, *args):
         """Generate stable cache key for method and arguments"""
@@ -53,14 +58,26 @@ class DataFetcher:
         self._cache_timestamps[cache_key] = time.time()
     
     def get_stock_data(self, symbols, period='1M'):
-        """Fetch stock data for given symbols with caching"""
+        """Fetch stock data for given symbols with caching - uses Schwab API first, Yahoo Finance fallback"""
         
         # Check cache first
         cache_key = self._get_cache_key('stock_data', symbols, period)
         cached_result = self._get_from_cache(cache_key)
         if cached_result is not None:
             return cached_result
-            
+        
+        # Try Schwab API first for real-time data
+        if self.using_schwab:
+            try:
+                result = self.schwab.get_stock_data_realtime(symbols, period)
+                if not result.empty:
+                    st.success("✅ Using Schwab API (Real-time data)")
+                    self._store_in_cache(cache_key, result)
+                    return result
+            except Exception as e:
+                st.warning(f"Schwab API error, falling back to Yahoo Finance: {str(e)}")
+        
+        # Fallback to Yahoo Finance
         try:
             # Convert period to yfinance format with intraday intervals for real-time data
             period_map = {
@@ -84,6 +101,8 @@ class DataFetcher:
             
             yf_period = period_map.get(period, '1mo')
             yf_interval = interval_map.get(period, '1d')
+            
+            st.info("ℹ️ Using Yahoo Finance (15-min delayed data)")
             
             # Fetch data for all symbols
             tickers = yf.Tickers(' '.join(symbols))
