@@ -22,6 +22,7 @@ from components.personal_portfolio import PersonalPortfolio
 from components.volatility_hole_chart import VolatilityHoleChart
 from components.advanced_ta_dashboard import AdvancedTADashboard
 from components.pro_options_dashboard import ProOptionsDashboard
+from components.risk_dashboard import RiskDashboard
 
 # Page configuration
 st.set_page_config(
@@ -188,10 +189,10 @@ def main():
             sentiment_analysis = SentimentAnalysis()
             sentiment_analysis.render(selected_stocks, MINING_STOCKS)
         
-        # Tab 9: Risk Management
+        # Tab 9: Risk Management (Professional)
         with tab9:
-            risk_management = RiskManagement()
-            risk_management.render(selected_stocks, MINING_STOCKS)
+            risk_dashboard = RiskDashboard()
+            risk_dashboard.render(selected_stocks, MINING_STOCKS)
         
         # Tab 10: Market Outlook (Enhanced Weekly/Monthly)
         with tab10:
