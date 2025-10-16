@@ -90,7 +90,9 @@ class BacktestingEngine:
             
             buy_hold_return = ((merged.iloc[-1]['Close'] - merged.iloc[0]['Close']) / merged.iloc[0]['Close']) * 100
             
-            total_days = (merged.iloc[-1]['Date'] - merged.iloc[0]['Date']).days
+            start_date_val = pd.to_datetime(merged.iloc[0]['Date'])
+            end_date_val = pd.to_datetime(merged.iloc[-1]['Date'])
+            total_days = (end_date_val - start_date_val).days
             cagr = (((final_capital / initial_capital) ** (365 / total_days)) - 1) * 100 if total_days > 0 else 0
             
             if len(equity_df) > 1:
