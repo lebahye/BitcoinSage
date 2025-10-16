@@ -329,62 +329,75 @@ class RiskEngine:
             benchmark_hist = benchmark_ticker.history(period=period)
             
             if benchmark_hist.empty:
+                st.warning(f"Could not fetch {benchmark} data for beta calculation")
                 return {}
             
             benchmark_returns = benchmark_hist['Close'].pct_change().dropna()
             
             beta_results = []
+            failed_symbols = []
             
             for symbol in symbols:
-                ticker = yf.Ticker(symbol)
-                hist = ticker.history(period=period)
-                
-                if hist.empty:
-                    continue
-                
-                stock_returns = hist['Close'].pct_change().dropna()
-                
-                combined = pd.DataFrame({
-                    'stock': stock_returns,
-                    'benchmark': benchmark_returns
-                }).dropna()
-                
-                if len(combined) < 30:
-                    continue
-                
-                covariance = combined['stock'].cov(combined['benchmark'])
-                benchmark_variance = combined['benchmark'].var()
-                
-                beta = covariance / benchmark_variance if benchmark_variance != 0 else 1.0
-                
-                correlation = combined['stock'].corr(combined['benchmark'])
-                
-                r_squared = correlation ** 2
-                
-                stock_std = stock_returns.std() * np.sqrt(252)
-                
-                if beta > 1.5:
-                    risk_level = "VERY HIGH"
-                    interpretation = f"50% more volatile than Bitcoin - aggressive stock"
-                elif beta > 1.0:
-                    risk_level = "HIGH"
-                    interpretation = f"Moves with Bitcoin but amplified"
-                elif beta > 0.7:
-                    risk_level = "MODERATE"
-                    interpretation = f"Tracks Bitcoin somewhat"
-                else:
-                    risk_level = "LOW"
-                    interpretation = f"Independent of Bitcoin movements"
-                
-                beta_results.append({
-                    'symbol': symbol,
-                    'beta': float(beta),
-                    'correlation': float(correlation),
-                    'r_squared': float(r_squared),
-                    'annualized_volatility': float(stock_std * 100),
-                    'risk_level': risk_level,
-                    'interpretation': interpretation
-                })
+                try:
+                    ticker = yf.Ticker(symbol)
+                    hist = ticker.history(period=period)
+                    
+                    if hist.empty:
+                        failed_symbols.append(f"{symbol} (no data)")
+                        continue
+                    
+                    stock_returns = hist['Close'].pct_change().dropna()
+                    
+                    combined = pd.DataFrame({
+                        'stock': stock_returns,
+                        'benchmark': benchmark_returns
+                    }).dropna()
+                    
+                    if len(combined) < 10:
+                        failed_symbols.append(f"{symbol} (insufficient data: {len(combined)} days)")
+                        continue
+                    
+                    covariance = combined['stock'].cov(combined['benchmark'])
+                    benchmark_variance = combined['benchmark'].var()
+                    
+                    beta = covariance / benchmark_variance if benchmark_variance != 0 else 1.0
+                    
+                    correlation = combined['stock'].corr(combined['benchmark'])
+                    
+                    r_squared = correlation ** 2
+                    
+                    stock_std = stock_returns.std() * np.sqrt(252)
+                    
+                    if beta > 1.5:
+                        risk_level = "VERY HIGH"
+                        interpretation = f"50% more volatile than Bitcoin - aggressive stock"
+                    elif beta > 1.0:
+                        risk_level = "HIGH"
+                        interpretation = f"Moves with Bitcoin but amplified"
+                    elif beta > 0.7:
+                        risk_level = "MODERATE"
+                        interpretation = f"Tracks Bitcoin somewhat"
+                    else:
+                        risk_level = "LOW"
+                        interpretation = f"Independent of Bitcoin movements"
+                    
+                    beta_results.append({
+                        'symbol': symbol,
+                        'beta': float(beta),
+                        'correlation': float(correlation),
+                        'r_squared': float(r_squared),
+                        'annualized_volatility': float(stock_std * 100),
+                        'risk_level': risk_level,
+                        'interpretation': interpretation
+                    })
+                except Exception as e:
+                    failed_symbols.append(f"{symbol} (error: {str(e)})")
+            
+            if failed_symbols and beta_results:
+                st.info(f"Note: Could not calculate beta for: {', '.join(failed_symbols)}")
+            
+            if not beta_results:
+                return {}
             
             beta_results = sorted(beta_results, key=lambda x: x['beta'], reverse=True)
             
