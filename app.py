@@ -23,6 +23,7 @@ from components.volatility_hole_chart import VolatilityHoleChart
 from components.advanced_ta_dashboard import AdvancedTADashboard
 from components.pro_options_dashboard import ProOptionsDashboard
 from components.risk_dashboard import RiskDashboard
+from components.backtesting_dashboard import BacktestingDashboard
 
 # Page configuration
 st.set_page_config(
@@ -119,7 +120,7 @@ def main():
         st.rerun()
     
     # Main dashboard tabs - Enhanced with new analytical components
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab16 = st.tabs([
         "📊 Stock Overview", 
         "⚡ Options Flow", 
         "🌊 Dark Pool Activity", 
@@ -134,7 +135,8 @@ def main():
         "🛡️ RIOT Protection",
         "🎲 Mining Prediction Markets",
         "🏆 Your Portfolio",
-        "🕳️ Volatility Hole"
+        "🕳️ Volatility Hole",
+        "🔬 Backtesting Lab"
     ])
     
     if not selected_stocks:
@@ -237,6 +239,11 @@ def main():
             for symbol in selected_stocks:
                 with st.expander(f"📈 {symbol} - Volatility Hole Analysis", expanded=True if symbol == 'RIOT' else False):
                     volatility_hole.render(symbol, data_fetcher)
+        
+        # Tab 16: Backtesting Lab (Strategy Validation)
+        with tab16:
+            backtesting_dashboard = BacktestingDashboard()
+            backtesting_dashboard.render(selected_stocks, MINING_STOCKS)
             
     except Exception as e:
         st.error(f"An error occurred while fetching data: {str(e)}")
