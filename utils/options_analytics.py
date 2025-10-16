@@ -1,0 +1,417 @@
+import pandas as pd
+import numpy as np
+import yfinance as yf
+from datetime import datetime, timedelta
+import streamlit as st
+from scipy.stats import norm
+
+class OptionsAnalytics:
+    """Professional-grade options analytics for institutional-level analysis"""
+    
+    def __init__(self):
+        self.cache = {}
+        self.iv_history_cache = {}
+    
+    def calculate_iv_percentile(self, symbol, current_iv, period_days=252):
+        """
+        Calculate IV Percentile - shows where current IV ranks historically
+        0% = lowest IV in period, 100% = highest IV in period
+        Professional traders use this to know if options are cheap or expensive
+        """
+        try:
+            ticker = yf.Ticker(symbol)
+            
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=period_days)
+            
+            hist = ticker.history(start=start_date, end=end_date, interval='1d')
+            
+            if hist.empty or len(hist) < 30:
+                return {}
+            
+            iv_history = []
+            
+            for i in range(len(hist)):
+                date_point = hist.index[i]
+                close_price = hist['Close'].iloc[i]
+                
+                try:
+                    expirations = ticker.options
+                    if not expirations:
+                        continue
+                    
+                    nearest_exp = expirations[0]
+                    chain = ticker.option_chain(nearest_exp)
+                    
+                    atm_calls = chain.calls[
+                        (chain.calls['strike'] >= close_price * 0.95) & 
+                        (chain.calls['strike'] <= close_price * 1.05)
+                    ]
+                    
+                    if not atm_calls.empty and 'impliedVolatility' in atm_calls.columns:
+                        avg_iv = atm_calls['impliedVolatility'].mean()
+                        if avg_iv > 0 and not np.isnan(avg_iv):
+                            iv_history.append({
+                                'date': date_point,
+                                'iv': float(avg_iv)
+                            })
+                except:
+                    continue
+            
+            if len(iv_history) < 10:
+                return {'error': 'Insufficient IV history data'}
+            
+            iv_values = [x['iv'] for x in iv_history]
+            iv_values_sorted = sorted(iv_values)
+            
+            if current_iv <= 0:
+                current_iv = iv_values[-1]
+            
+            values_below = len([x for x in iv_values if x < current_iv])
+            iv_percentile = (values_below / len(iv_values)) * 100
+            
+            values_equal_or_below = len([x for x in iv_values if x <= current_iv])
+            iv_rank = (values_equal_or_below / len(iv_values)) * 100
+            
+            min_iv = min(iv_values)
+            max_iv = max(iv_values)
+            median_iv = np.median(iv_values)
+            
+            if iv_percentile >= 75:
+                signal = "IV VERY HIGH - Options expensive, great for selling premium"
+            elif iv_percentile >= 50:
+                signal = "IV HIGH - Options moderately expensive, consider selling"
+            elif iv_percentile >= 25:
+                signal = "IV NORMAL - Fair pricing, neutral strategy"
+            else:
+                signal = "IV LOW - Options cheap, good for buying protection"
+            
+            return {
+                'iv_percentile': iv_percentile,
+                'iv_rank': iv_rank,
+                'current_iv': current_iv,
+                'min_iv': min_iv,
+                'max_iv': max_iv,
+                'median_iv': median_iv,
+                'iv_history': iv_history,
+                'signal': signal,
+                'period_days': len(iv_values)
+            }
+            
+        except Exception as e:
+            st.error(f"Error calculating IV percentile for {symbol}: {str(e)}")
+            return {}
+    
+    def scan_options_chain(self, symbol, strategy='covered_calls'):
+        """
+        Full options chain scanner with strategy recommendations
+        Identifies best strikes based on strategy type
+        """
+        try:
+            ticker = yf.Ticker(symbol)
+            current_price = ticker.info.get('currentPrice', 0)
+            
+            if current_price == 0:
+                hist = ticker.history(period='1d')
+                if not hist.empty:
+                    current_price = hist['Close'].iloc[-1]
+            
+            expirations = ticker.options
+            
+            if not expirations:
+                return {}
+            
+            recommendations = []
+            
+            for i, exp_date in enumerate(expirations[:4]):
+                try:
+                    chain = ticker.option_chain(exp_date)
+                    calls = chain.calls
+                    puts = chain.puts
+                    
+                    days_to_exp = (pd.to_datetime(exp_date) - datetime.now()).days
+                    
+                    if strategy == 'covered_calls':
+                        otm_calls = calls[calls['strike'] > current_price * 1.01]
+                        
+                        for _, option in otm_calls.head(5).iterrows():
+                            strike = option['strike']
+                            premium = option.get('lastPrice', option.get('bid', 0))
+                            iv = option.get('impliedVolatility', 0)
+                            delta = option.get('delta', self._estimate_delta('call', current_price, strike, days_to_exp, iv))
+                            
+                            if premium > 0:
+                                annual_return = (premium / current_price) * (365 / days_to_exp) * 100
+                                
+                                recommendations.append({
+                                    'type': 'Covered Call',
+                                    'expiration': exp_date,
+                                    'days_to_exp': days_to_exp,
+                                    'strike': strike,
+                                    'premium': premium,
+                                    'iv': iv * 100 if iv > 0 else 0,
+                                    'delta': delta,
+                                    'annual_return': annual_return,
+                                    'max_gain': ((strike - current_price) + premium) / current_price * 100,
+                                    'breakeven': current_price
+                                })
+                    
+                    elif strategy == 'protective_puts':
+                        otm_puts = puts[puts['strike'] < current_price * 0.99]
+                        
+                        for _, option in otm_puts.tail(5).iterrows():
+                            strike = option['strike']
+                            premium = option.get('lastPrice', option.get('ask', 0))
+                            iv = option.get('impliedVolatility', 0)
+                            delta = option.get('delta', self._estimate_delta('put', current_price, strike, days_to_exp, iv))
+                            
+                            if premium > 0:
+                                cost_pct = (premium / current_price) * 100
+                                protection_pct = ((current_price - strike) / current_price) * 100
+                                
+                                recommendations.append({
+                                    'type': 'Protective Put',
+                                    'expiration': exp_date,
+                                    'days_to_exp': days_to_exp,
+                                    'strike': strike,
+                                    'premium': premium,
+                                    'iv': iv * 100 if iv > 0 else 0,
+                                    'delta': delta,
+                                    'cost_pct': cost_pct,
+                                    'protection_pct': protection_pct,
+                                    'protected_price': strike
+                                })
+                    
+                    elif strategy == 'long_calls':
+                        atm_otm_calls = calls[
+                            (calls['strike'] >= current_price * 0.98) & 
+                            (calls['strike'] <= current_price * 1.10)
+                        ]
+                        
+                        for _, option in atm_otm_calls.head(8).iterrows():
+                            strike = option['strike']
+                            premium = option.get('lastPrice', option.get('ask', 0))
+                            iv = option.get('impliedVolatility', 0)
+                            delta = option.get('delta', self._estimate_delta('call', current_price, strike, days_to_exp, iv))
+                            gamma = option.get('gamma', 0)
+                            theta = option.get('theta', 0)
+                            
+                            if premium > 0:
+                                breakeven = strike + premium
+                                leverage = (delta * current_price) / premium if premium > 0 else 0
+                                
+                                recommendations.append({
+                                    'type': 'Long Call',
+                                    'expiration': exp_date,
+                                    'days_to_exp': days_to_exp,
+                                    'strike': strike,
+                                    'premium': premium,
+                                    'iv': iv * 100 if iv > 0 else 0,
+                                    'delta': delta,
+                                    'gamma': gamma,
+                                    'theta': theta,
+                                    'breakeven': breakeven,
+                                    'leverage': leverage,
+                                    'moneyness': 'ITM' if strike < current_price else 'ATM' if abs(strike - current_price) < 0.02 * current_price else 'OTM'
+                                })
+                
+                except Exception as e:
+                    continue
+            
+            recommendations_df = pd.DataFrame(recommendations)
+            
+            if not recommendations_df.empty:
+                if strategy == 'covered_calls':
+                    recommendations_df = recommendations_df.sort_values('annual_return', ascending=False)
+                elif strategy == 'protective_puts':
+                    recommendations_df['score'] = recommendations_df['protection_pct'] / recommendations_df['cost_pct']
+                    recommendations_df = recommendations_df.sort_values('score', ascending=False)
+                elif strategy == 'long_calls':
+                    recommendations_df['score'] = recommendations_df['delta'] * recommendations_df['leverage'] / (recommendations_df['premium'] + 0.01)
+                    recommendations_df = recommendations_df.sort_values('score', ascending=False)
+            
+            return {
+                'current_price': current_price,
+                'strategy': strategy,
+                'recommendations': recommendations_df.to_dict('records') if not recommendations_df.empty else [],
+                'total_opportunities': len(recommendations_df)
+            }
+            
+        except Exception as e:
+            st.error(f"Error scanning options chain for {symbol}: {str(e)}")
+            return {}
+    
+    def _estimate_delta(self, option_type, spot, strike, days_to_exp, iv):
+        """Estimate delta using Black-Scholes approximation"""
+        try:
+            if days_to_exp <= 0 or iv <= 0:
+                return 0.5 if option_type == 'call' else -0.5
+            
+            T = days_to_exp / 365.0
+            r = 0.05
+            
+            d1 = (np.log(spot / strike) + (r + 0.5 * iv**2) * T) / (iv * np.sqrt(T))
+            
+            if option_type == 'call':
+                delta = norm.cdf(d1)
+            else:
+                delta = norm.cdf(d1) - 1
+            
+            return float(delta)
+            
+        except:
+            return 0.5 if option_type == 'call' else -0.5
+    
+    def calculate_greeks_surface(self, symbol):
+        """
+        Calculate Greeks surface across all strikes and expirations
+        Visualizes how Greeks change with price and time
+        """
+        try:
+            ticker = yf.Ticker(symbol)
+            current_price = ticker.info.get('currentPrice', 0)
+            
+            if current_price == 0:
+                hist = ticker.history(period='1d')
+                if not hist.empty:
+                    current_price = hist['Close'].iloc[-1]
+            
+            expirations = ticker.options[:6]
+            
+            greeks_data = []
+            
+            for exp_date in expirations:
+                try:
+                    chain = ticker.option_chain(exp_date)
+                    days_to_exp = (pd.to_datetime(exp_date) - datetime.now()).days
+                    
+                    for _, call in chain.calls.iterrows():
+                        strike = call['strike']
+                        greeks_data.append({
+                            'expiration': exp_date,
+                            'days_to_exp': days_to_exp,
+                            'strike': strike,
+                            'type': 'call',
+                            'delta': call.get('delta', 0),
+                            'gamma': call.get('gamma', 0),
+                            'theta': call.get('theta', 0),
+                            'vega': call.get('vega', 0),
+                            'iv': call.get('impliedVolatility', 0)
+                        })
+                    
+                    for _, put in chain.puts.iterrows():
+                        strike = put['strike']
+                        greeks_data.append({
+                            'expiration': exp_date,
+                            'days_to_exp': days_to_exp,
+                            'strike': strike,
+                            'type': 'put',
+                            'delta': put.get('delta', 0),
+                            'gamma': put.get('gamma', 0),
+                            'theta': put.get('theta', 0),
+                            'vega': put.get('vega', 0),
+                            'iv': put.get('impliedVolatility', 0)
+                        })
+                
+                except:
+                    continue
+            
+            df = pd.DataFrame(greeks_data)
+            
+            return {
+                'current_price': current_price,
+                'greeks_data': df,
+                'expirations': expirations
+            }
+            
+        except Exception as e:
+            st.error(f"Error calculating Greeks surface for {symbol}: {str(e)}")
+            return {}
+    
+    def calculate_iv_term_structure(self, symbol):
+        """
+        Calculate IV Term Structure - how IV changes across expirations
+        Shows if near-term or far-term options are more expensive
+        """
+        try:
+            ticker = yf.Ticker(symbol)
+            current_price = ticker.info.get('currentPrice', 0)
+            
+            if current_price == 0:
+                hist = ticker.history(period='1d')
+                if not hist.empty:
+                    current_price = hist['Close'].iloc[-1]
+            
+            expirations = ticker.options
+            
+            term_structure = []
+            
+            for exp_date in expirations:
+                try:
+                    chain = ticker.option_chain(exp_date)
+                    days_to_exp = (pd.to_datetime(exp_date) - datetime.now()).days
+                    
+                    if days_to_exp < 1:
+                        continue
+                    
+                    atm_calls = chain.calls[
+                        (chain.calls['strike'] >= current_price * 0.98) & 
+                        (chain.calls['strike'] <= current_price * 1.02)
+                    ]
+                    
+                    atm_puts = chain.puts[
+                        (chain.puts['strike'] >= current_price * 0.98) & 
+                        (chain.puts['strike'] <= current_price * 1.02)
+                    ]
+                    
+                    if not atm_calls.empty:
+                        call_iv = atm_calls['impliedVolatility'].mean()
+                    else:
+                        call_iv = 0
+                    
+                    if not atm_puts.empty:
+                        put_iv = atm_puts['impliedVolatility'].mean()
+                    else:
+                        put_iv = 0
+                    
+                    avg_iv = (call_iv + put_iv) / 2 if call_iv > 0 and put_iv > 0 else max(call_iv, put_iv)
+                    
+                    if avg_iv > 0:
+                        term_structure.append({
+                            'expiration': exp_date,
+                            'days_to_exp': days_to_exp,
+                            'iv': float(avg_iv),
+                            'call_iv': float(call_iv),
+                            'put_iv': float(put_iv)
+                        })
+                
+                except:
+                    continue
+            
+            if len(term_structure) < 2:
+                return {}
+            
+            term_structure = sorted(term_structure, key=lambda x: x['days_to_exp'])
+            
+            near_term_iv = term_structure[0]['iv'] if len(term_structure) > 0 else 0
+            far_term_iv = term_structure[-1]['iv'] if len(term_structure) > 0 else 0
+            
+            if near_term_iv > far_term_iv * 1.1:
+                shape = "Inverted (Backwardation) - Near-term event expected"
+            elif far_term_iv > near_term_iv * 1.1:
+                shape = "Normal (Contango) - Uncertainty increases over time"
+            else:
+                shape = "Flat - Stable expectations across time"
+            
+            return {
+                'current_price': current_price,
+                'term_structure': term_structure,
+                'shape': shape,
+                'near_term_iv': near_term_iv * 100,
+                'far_term_iv': far_term_iv * 100,
+                'term_spread': (far_term_iv - near_term_iv) * 100
+            }
+            
+        except Exception as e:
+            st.error(f"Error calculating IV term structure for {symbol}: {str(e)}")
+            return {}

@@ -28,6 +28,14 @@ The application implements specialized analyzer classes for different types of f
 - **OptionsAnalyzer**: Calculates put-call ratios, volatility signals, and options flow metrics
 - **ChartBuilder**: Creates interactive financial charts using Plotly with customizable indicators
 - **Dark Pool Analysis**: Identifies unusual volume patterns and institutional activity
+- **AdvancedTA (NEW)**: Professional-grade technical analysis library featuring:
+  - **Volume Profile (Market Profile)**: Identifies institutional price levels and high-volume nodes (POC)
+  - **Anchored VWAP**: Tracks institutional entry/exit efficiency from key dates
+  - **Ichimoku Cloud**: Complete trend-following system with multiple confirmation signals
+  - **Fibonacci Extensions**: Professional price targets for take-profit planning
+  - **Market Breadth**: Sector-wide strength analysis (Advance-Decline metrics)
+  - **Money Flow Index (MFI)**: Volume-weighted RSI for buying/selling pressure
+  - **Elder Ray Index**: Bull/Bear power analysis relative to EMA
 
 This modular approach allows for easy extension of analytical capabilities and maintains separation of concerns between data processing and visualization.
 
