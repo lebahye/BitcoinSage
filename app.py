@@ -147,100 +147,141 @@ def main():
         # Fetch stock data
         with st.spinner("Fetching market data..."):
             stock_data = data_fetcher.get_stock_data(selected_stocks, time_range)
-            
-        if stock_data.empty:
-            st.error("No stock data available. Please check your selection and try again.")
-            return
+        
+        stock_data_available = not stock_data.empty
+        
+        if not stock_data_available:
+            st.warning("⚠️ Yahoo Finance rate limit reached. Some tabs require stock data and won't work. Try: Sentiment Analysis, Backtesting Lab, or select fewer stocks and refresh.")
             
         # Tab 1: Stock Overview
         with tab1:
+            if not stock_data_available:
+                st.error("Stock data unavailable due to Yahoo Finance rate limits. Please select fewer stocks or wait 30 seconds and refresh.")
+                st.info("💡 **Working Tabs**: Sentiment Analysis (Tab 8), Backtesting Lab (Tab 16)")
+                return
             stock_dashboard = StockDashboard()
             stock_dashboard.render(stock_data, selected_stocks, MINING_STOCKS, chart_builder)
         
         # Tab 2: Options Flow
         with tab2:
-            options_dashboard = OptionsDashboard()
-            options_dashboard.render(selected_stocks, options_analyzer, chart_builder)
+            if not stock_data_available:
+                st.error("Options data requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
+            else:
+                options_dashboard = OptionsDashboard()
+                options_dashboard.render(selected_stocks, options_analyzer, chart_builder)
         
         # Tab 3: Dark Pool Activity
         with tab3:
-            dark_pool_tracker = DarkPoolTracker()
-            dark_pool_tracker.render(selected_stocks, data_fetcher, chart_builder)
+            if not stock_data_available:
+                st.error("Dark pool data requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
+            else:
+                dark_pool_tracker = DarkPoolTracker()
+                dark_pool_tracker.render(selected_stocks, data_fetcher, chart_builder)
         
         # Tab 4: Technical Analysis
         with tab4:
-            render_technical_analysis(stock_data, selected_stocks, chart_builder)
+            if not stock_data_available:
+                st.error("Technical analysis requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
+            else:
+                render_technical_analysis(stock_data, selected_stocks, chart_builder)
         
         # Tab 5: Enhanced Technical Analysis
         with tab5:
-            enhanced_technical = EnhancedTechnical()
-            enhanced_technical.render(selected_stocks, MINING_STOCKS)
+            if not stock_data_available:
+                st.error("Enhanced TA requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
+            else:
+                enhanced_technical = EnhancedTechnical()
+                enhanced_technical.render(selected_stocks, MINING_STOCKS)
         
         # Tab 6: Advanced TA (Professional-grade indicators)
         with tab6:
-            advanced_ta = AdvancedTADashboard()
-            advanced_ta.render(selected_stocks, MINING_STOCKS)
+            if not stock_data_available:
+                st.error("Advanced TA requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
+            else:
+                advanced_ta = AdvancedTADashboard()
+                advanced_ta.render(selected_stocks, MINING_STOCKS)
         
         # Tab 7: Pro Options Analytics
         with tab7:
-            pro_options = ProOptionsDashboard()
-            pro_options.render(selected_stocks, MINING_STOCKS)
+            if not stock_data_available:
+                st.error("Options analytics requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
+            else:
+                pro_options = ProOptionsDashboard()
+                pro_options.render(selected_stocks, MINING_STOCKS)
         
-        # Tab 8: News Sentiment Analysis (Alpha Vantage powered)
+        # Tab 8: News Sentiment Analysis (Alpha Vantage powered - WORKS WITHOUT YAHOO DATA)
         with tab8:
             sentiment_dashboard = SentimentDashboard()
             sentiment_dashboard.render(list(MINING_STOCKS.keys()))
         
         # Tab 9: Risk Management (Professional)
         with tab9:
-            risk_dashboard = RiskDashboard()
-            risk_dashboard.render(selected_stocks, MINING_STOCKS)
+            if not stock_data_available:
+                st.error("Risk analysis requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
+            else:
+                risk_dashboard = RiskDashboard()
+                risk_dashboard.render(selected_stocks, MINING_STOCKS)
         
         # Tab 10: Market Outlook (Enhanced Weekly/Monthly)
         with tab10:
-            weekly_outlook = WeeklyOutlook()
-            weekly_outlook.render(selected_stocks, MINING_STOCKS)
+            if not stock_data_available:
+                st.error("Market outlook requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
+            else:
+                weekly_outlook = WeeklyOutlook()
+                weekly_outlook.render(selected_stocks, MINING_STOCKS)
         
         # Tab 11: Options Evaluator (Purchase Recommendations)
         with tab11:
-            options_evaluator = OptionsEvaluator()
-            options_evaluator.render(selected_stocks, options_analyzer, chart_builder)
+            if not stock_data_available:
+                st.error("Options evaluator requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
+            else:
+                options_evaluator = OptionsEvaluator()
+                options_evaluator.render(selected_stocks, options_analyzer, chart_builder)
         
         # Tab 12: RIOT Protection Strategies
         with tab12:
-            riot_protection = RIOTProtection()
-            riot_protection.render(data_fetcher, options_analyzer)
+            if not stock_data_available:
+                st.error("RIOT protection requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
+            else:
+                riot_protection = RIOTProtection()
+                riot_protection.render(data_fetcher, options_analyzer)
         
-        # Tab 13: Bitcoin Mining Prediction Markets
+        # Tab 13: Bitcoin Mining Prediction Markets (WORKS WITHOUT YAHOO DATA)
         with tab13:
             polymarket_tracker = PolymarketTracker()
             polymarket_tracker.render()
         
         # Tab 14: Personal Portfolio
         with tab14:
-            personal_portfolio = PersonalPortfolio()
-            personal_portfolio.render(data_fetcher, options_analyzer)
+            if not stock_data_available:
+                st.error("Portfolio tracking requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
+            else:
+                personal_portfolio = PersonalPortfolio()
+                personal_portfolio.render(data_fetcher, options_analyzer)
         
         # Tab 15: Volatility Hole Chart (Danny Cheng's Favorite Indicator)
         with tab15:
-            volatility_hole = VolatilityHoleChart()
-            
-            st.title("🕳️ Volatility Hole Indicator")
-            st.markdown("### Danny Cheng's Favorite - Spots Low Volatility Before Major Moves")
-            
-            st.info("""
-            **What You'll See:**
-            - 🟡 **Yellow lines** = Volatility holes (consolidation zones)  
-            - 🔥 **Breakout markers** = When the hole releases (up or down)  
-            - 📊 **Volatility score** = Below 25 = hole forming, Above 75 = breakout  
-            - 📊 **Momentum bars** = Green/red showing price direction
-            """)
-            
-            for symbol in selected_stocks:
-                with st.expander(f"📈 {symbol} - Volatility Hole Analysis", expanded=True if symbol == 'RIOT' else False):
-                    volatility_hole.render(symbol, data_fetcher)
+            if not stock_data_available:
+                st.error("Volatility hole analysis requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
+            else:
+                volatility_hole = VolatilityHoleChart()
+                
+                st.title("🕳️ Volatility Hole Indicator")
+                st.markdown("### Danny Cheng's Favorite - Spots Low Volatility Before Major Moves")
+                
+                st.info("""
+                **What You'll See:**
+                - 🟡 **Yellow lines** = Volatility holes (consolidation zones)  
+                - 🔥 **Breakout markers** = When the hole releases (up or down)  
+                - 📊 **Volatility score** = Below 25 = hole forming, Above 75 = breakout  
+                - 📊 **Momentum bars** = Green/red showing price direction
+                """)
+                
+                for symbol in selected_stocks:
+                    with st.expander(f"📈 {symbol} - Volatility Hole Analysis", expanded=True if symbol == 'RIOT' else False):
+                        volatility_hole.render(symbol, data_fetcher)
         
-        # Tab 16: Backtesting Lab (Strategy Validation)
+        # Tab 16: Backtesting Lab (WORKS WITHOUT YAHOO DATA)
         with tab16:
             backtesting_dashboard = BacktestingDashboard()
             backtesting_dashboard.render(selected_stocks, MINING_STOCKS)
