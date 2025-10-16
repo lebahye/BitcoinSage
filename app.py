@@ -20,6 +20,7 @@ from components.riot_protection import RIOTProtection
 from components.polymarket_tracker import PolymarketTracker
 from components.personal_portfolio import PersonalPortfolio
 from components.volatility_hole_chart import VolatilityHoleChart
+from components.advanced_ta_dashboard import AdvancedTADashboard
 
 # Page configuration
 st.set_page_config(
@@ -116,12 +117,13 @@ def main():
         st.rerun()
     
     # Main dashboard tabs - Enhanced with new analytical components
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14 = st.tabs([
         "📊 Stock Overview", 
         "⚡ Options Flow", 
         "🌊 Dark Pool Activity", 
         "📈 Technical Analysis",
-        "🔬 Enhanced Technical", 
+        "🔬 Enhanced Technical",
+        "⚡ Advanced TA (Pro)",
         "📰 Sentiment Analysis", 
         "⚠️ Risk Management",
         "🔮 Market Outlook",
@@ -169,43 +171,48 @@ def main():
             enhanced_technical = EnhancedTechnical()
             enhanced_technical.render(selected_stocks, MINING_STOCKS)
         
-        # Tab 6: Sentiment Analysis
+        # Tab 6: Advanced TA (Professional-grade indicators)
         with tab6:
+            advanced_ta = AdvancedTADashboard()
+            advanced_ta.render(selected_stocks, MINING_STOCKS)
+        
+        # Tab 7: Sentiment Analysis
+        with tab7:
             sentiment_analysis = SentimentAnalysis()
             sentiment_analysis.render(selected_stocks, MINING_STOCKS)
         
-        # Tab 7: Risk Management
-        with tab7:
+        # Tab 8: Risk Management
+        with tab8:
             risk_management = RiskManagement()
             risk_management.render(selected_stocks, MINING_STOCKS)
         
-        # Tab 8: Market Outlook (Enhanced Weekly/Monthly)
-        with tab8:
+        # Tab 9: Market Outlook (Enhanced Weekly/Monthly)
+        with tab9:
             weekly_outlook = WeeklyOutlook()
             weekly_outlook.render(selected_stocks, MINING_STOCKS)
         
-        # Tab 9: Options Evaluator (Purchase Recommendations)
-        with tab9:
+        # Tab 10: Options Evaluator (Purchase Recommendations)
+        with tab10:
             options_evaluator = OptionsEvaluator()
             options_evaluator.render(selected_stocks, options_analyzer, chart_builder)
         
-        # Tab 10: RIOT Protection Strategies
-        with tab10:
+        # Tab 11: RIOT Protection Strategies
+        with tab11:
             riot_protection = RIOTProtection()
             riot_protection.render(data_fetcher, options_analyzer)
         
-        # Tab 11: Bitcoin Mining Prediction Markets
-        with tab11:
+        # Tab 12: Bitcoin Mining Prediction Markets
+        with tab12:
             polymarket_tracker = PolymarketTracker()
             polymarket_tracker.render()
         
-        # Tab 12: Personal Portfolio
-        with tab12:
+        # Tab 13: Personal Portfolio
+        with tab13:
             personal_portfolio = PersonalPortfolio()
             personal_portfolio.render(data_fetcher, options_analyzer)
         
-        # Tab 13: Volatility Hole Chart (Danny Cheng's Favorite Indicator)
-        with tab13:
+        # Tab 14: Volatility Hole Chart (Danny Cheng's Favorite Indicator)
+        with tab14:
             volatility_hole = VolatilityHoleChart()
             
             st.title("🕳️ Volatility Hole Indicator")
