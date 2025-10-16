@@ -22,8 +22,31 @@ class VolatilityHoleChart:
         st.subheader(f"🕳️ {symbol} - Volatility Hole Analysis")
         st.markdown("*Danny Cheng's favorite indicator: spots low volatility zones before major moves*")
         
+        # Time period selector
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown("**Select timeframe to detect volatility holes at different scales:**")
+        with col2:
+            period = st.selectbox(
+                "Timeframe",
+                options=['1M', '3M', '6M', '1Y', '2Y'],
+                index=2,  # Default to 6M
+                key=f"vol_hole_period_{symbol}",
+                label_visibility="collapsed"
+            )
+        
+        # Period descriptions
+        period_info = {
+            '1M': '1 Month - Spot intraday/weekly holes forming NOW',
+            '3M': '3 Months - See recent swing trading opportunities',
+            '6M': '6 Months - Balanced view for position trading',
+            '1Y': '1 Year - Identify major trend reversals',
+            '2Y': '2 Years - Long-term pattern analysis'
+        }
+        st.info(f"📊 **{period_info[period]}**")
+        
         # Get extended data
-        prices_df = data_fetcher.get_stock_data([symbol], period='6M')
+        prices_df = data_fetcher.get_stock_data([symbol], period=period)
         
         if prices_df.empty or symbol not in prices_df.columns:
             st.warning(f"No data available for {symbol}")
@@ -41,7 +64,7 @@ class VolatilityHoleChart:
         self._render_volatility_hole_chart(symbol, prices, volatility_data, holes)
         
         # Render interpretation
-        self._render_interpretation(symbol, prices, volatility_data, holes)
+        self._render_interpretation(symbol, prices, volatility_data, holes, period)
         
     def _calculate_volatility_metrics(self, prices):
         """Calculate comprehensive volatility metrics"""
@@ -65,8 +88,12 @@ class VolatilityHoleChart:
         returns = prices.pct_change()
         hist_vol = returns.rolling(window=20).std() * np.sqrt(252) * 100
         
-        # 4. Normalized volatility score (0-100)
-        vol_score = bb_width.rolling(window=50).apply(
+        # 4. Normalized volatility score (0-100) - adaptive window for short timeframes
+        # Use smaller window for short periods to ensure we get meaningful scores
+        available_periods = len(bb_width.dropna())
+        optimal_window = max(min(available_periods // 2, 50), 10)  # Min 10, max 50, or half available data
+        
+        vol_score = bb_width.rolling(window=optimal_window).apply(
             lambda x: (x.iloc[-1] - x.min()) / (x.max() - x.min()) * 100 if x.max() > x.min() else 50
         )
         
@@ -97,7 +124,11 @@ class VolatilityHoleChart:
         hole_start = None
         hole_low_vol = None
         
-        for i in range(20, len(prices)):
+        # Start analysis from where we have valid volatility scores
+        # Use adaptive starting point based on available data
+        min_periods_needed = max(min(len(prices) // 3, 20), 5)  # At least 5 periods, max 20, or 1/3 of data
+        
+        for i in range(min_periods_needed, len(prices)):
             current_vol_score = vol_score.iloc[i] if not pd.isna(vol_score.iloc[i]) else 50
             current_bb_width = bb_width.iloc[i] if not pd.isna(bb_width.iloc[i]) else 0
             
@@ -302,10 +333,54 @@ class VolatilityHoleChart:
         
         st.plotly_chart(fig, width="stretch")
     
-    def _render_interpretation(self, symbol, prices, vol_data, holes):
+    def _render_interpretation(self, symbol, prices, vol_data, holes, period):
         """Render plain-English interpretation of volatility holes"""
         
         st.markdown("### 🎯 What This Chart Tells You")
+        
+        # Timeframe-specific insights
+        timeframe_guidance = {
+            '1M': {
+                'focus': 'Short-term holes forming RIGHT NOW',
+                'typical_duration': '2-7 days',
+                'best_for': 'Weekly/monthly option trades',
+                'action': 'Watch for breakouts in the next few days'
+            },
+            '3M': {
+                'focus': 'Recent swing trading setups',
+                'typical_duration': '1-3 weeks', 
+                'best_for': '30-45 day option strategies',
+                'action': 'Identify current consolidation patterns'
+            },
+            '6M': {
+                'focus': 'Position trading opportunities',
+                'typical_duration': '2-6 weeks',
+                'best_for': '60-90 day covered calls',
+                'action': 'Balance between recent and historical patterns'
+            },
+            '1Y': {
+                'focus': 'Major trend reversals',
+                'typical_duration': '1-3 months',
+                'best_for': 'LEAPS and long-term positions',
+                'action': 'Spot major bottoming/topping patterns'
+            },
+            '2Y': {
+                'focus': 'Multi-month cycles',
+                'typical_duration': '2-6 months',
+                'best_for': 'Long-term portfolio allocation',
+                'action': 'Understand long-term volatility cycles'
+            }
+        }
+        
+        if period in timeframe_guidance:
+            guide = timeframe_guidance[period]
+            st.success(f"""
+            **{period} Timeframe Strategy:**
+            - 🎯 **Focus:** {guide['focus']}
+            - ⏱️ **Hole Duration:** Typically {guide['typical_duration']}
+            - 💡 **Best For:** {guide['best_for']}
+            - 📈 **Action:** {guide['action']}
+            """)
         
         # Current status
         current_vol_score = vol_data['vol_score'].iloc[-1] if not pd.isna(vol_data['vol_score'].iloc[-1]) else 50
@@ -385,6 +460,43 @@ class VolatilityHoleChart:
             - 🚫 **Don't sell calls yet** - Wait for expansion
             - 👀 **Watch for direction** - Which way will it break?
             - ⏰ **Be patient** - Best opportunities come after breakout
+            
+            ---
+            
+            ### 📊 Why Multiple Timeframes Matter:
+            
+            **Think of it like weather forecasting:**
+            
+            **🔍 1-Month Chart (Hourly Weather):**
+            - Shows holes forming **RIGHT NOW**
+            - Perfect for timing **THIS WEEK'S** trades
+            - Catch short-term consolidation before quick moves
+            - Best for weekly/monthly options
+            
+            **📈 3-Month Chart (Weekly Weather):**
+            - Recent swing patterns
+            - See if current consolidation is part of bigger trend
+            - Match options to swing trade timeframe
+            
+            **🎯 6-Month Chart (Monthly Weather):**
+            - Balanced view (default)
+            - Position trading sweet spot
+            - Great for 60-90 day covered calls
+            
+            **📅 1-Year Chart (Seasonal Patterns):**
+            - Major trend reversals
+            - Identify quarterly bottoms/tops
+            - LEAPS and long-term planning
+            
+            **🔮 2-Year Chart (Climate Patterns):**
+            - Multi-month volatility cycles
+            - Understand stock's long-term behavior
+            - Portfolio allocation decisions
+            
+            **💡 Pro Tip:** 
+            - **Short holes** (1-3M) = Quick trades, tight stops
+            - **Long holes** (6M-2Y) = Bigger breakouts, wider moves
+            - **Multiple timeframes aligning** = STRONGEST signal!
             """)
         
         # Recent holes analysis
