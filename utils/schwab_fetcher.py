@@ -23,9 +23,9 @@ class SchwabDataFetcher:
             callback_url = os.environ.get('SCHWAB_CALLBACK_URL', 'https://127.0.0.1:8182')
             
             if not api_key or not app_secret:
-                st.warning("⚠️ Schwab API credentials not configured. Using Yahoo Finance fallback.")
                 return None
             
+            # Only try to authenticate if token file exists
             if os.path.exists(self.token_path):
                 with open(self.token_path, 'r') as f:
                     token_data = json.load(f)
@@ -35,20 +35,15 @@ class SchwabDataFetcher:
                     api_key,
                     app_secret
                 )
+                st.success("✅ Schwab API authenticated - Using real-time data")
+                return self.client
             else:
-                st.info("🔐 First-time Schwab API setup required. This will open a browser window for authentication.")
-                
-                self.client = auth.easy_client(
-                    api_key=api_key,
-                    app_secret=app_secret,
-                    callback_url=callback_url,
-                    token_path=self.token_path
-                )
-            
-            return self.client
+                # Token doesn't exist - can't authenticate in cloud environment
+                # User must run OAuth locally and upload token
+                return None
             
         except Exception as e:
-            st.error(f"Schwab API initialization error: {str(e)}")
+            # Silent fail - will use Yahoo Finance fallback
             return None
     
     def is_available(self):
