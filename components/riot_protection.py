@@ -11,15 +11,15 @@ class RIOTProtection:
     
     def __init__(self):
         self.user_position = {
-            'shares': 10000,
+            'shares': 10975,
             'cost_basis': 18.22,
-            'total_investment': 182200
+            'total_investment': 199755
         }
     
     def render(self, data_fetcher, options_analyzer):
         """Render RIOT protection strategies interface"""
         st.title("🛡️ RIOT Share Protection Strategies")
-        st.markdown("### Protecting Your 10,000 RIOT Shares WITHOUT CASH - Generate Income!")
+        st.markdown("### Protecting Your 10,975 RIOT Shares WITHOUT CASH - Generate Income!")
         
         # Get real-time RIOT data FIRST
         riot_data = data_fetcher.get_stock_data(['RIOT'], period='1D')
@@ -46,7 +46,7 @@ class RIOTProtection:
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.metric("Your Position", "10,000 shares")
+            st.metric("Your Position", "10,975 shares")
             st.metric("Cost Basis", "$18.22")
         
         with col2:
@@ -99,14 +99,14 @@ class RIOTProtection:
         with col1:
             st.markdown(f"""
             **✅ What You Own:**
-            - **10,000 RIOT shares** 
+            - **10,975 RIOT shares** 
             - **Paid:** $18.22 per share
-            - **Total Investment:** $182,200
-            - **Current Value:** ${current_price * 10000:,.0f}
+            - **Total Investment:** $199,755
+            - **Current Value:** ${current_price * 10975:,.0f}
             """)
         
         with col2:
-            pnl = (current_price - 18.22) * 10000
+            pnl = (current_price - 18.22) * 10975
             pnl_pct = ((current_price - 18.22) / 18.22) * 100
             st.markdown(f"""
             **📊 Current Status:**
@@ -203,9 +203,9 @@ class RIOTProtection:
         st.warning("""
         **⚠️ Important:** Always paper trade first if you're new to options! 
         
-        **For Your 10,000 Shares, You Need:**
-        - **100 contracts** for any strategy (each contract = 100 shares)
-        - **Example:** To sell covered calls on all shares = "Sell to Open 100 contracts"
+        **For Your 10,975 Shares, You Need:**
+        - **109 contracts** for any strategy (each contract = 100 shares)
+        - **Example:** To sell covered calls on all shares = "Sell to Open 109 contracts"
         """)
         
         exec_col1, exec_col2 = st.columns(2)
@@ -263,7 +263,7 @@ class RIOTProtection:
         - **Avoid:** 60+ day options (too long, less flexibility)
         
         **How it works - NO CASH NEEDED:**
-        - Keep all 10,000 RIOT shares
+        - Keep all 10,975 RIOT shares
         - **SELL call options** with 30-45 day expiration (you receive premium immediately)
         - Generate monthly income while holding shares
         - If RIOT stays below strike, keep premium + shares
@@ -302,10 +302,10 @@ class RIOTProtection:
             
             # Calculate income potential and upside caps
             relevant_calls['upside_cap'] = ((relevant_calls['strike'] / current_price) - 1) * 100
-            relevant_calls['total_income'] = relevant_calls['lastPrice'] * 10000  # Income for all 10,000 shares (100 contracts)
+            relevant_calls['total_income'] = relevant_calls['lastPrice'] * 10975  # Income for all 10,975 shares (109 contracts)
             relevant_calls['income_per_share'] = relevant_calls['lastPrice']
             relevant_calls['monthly_yield'] = (relevant_calls['income_per_share'] / current_price) * 100
-            relevant_calls['contracts_needed'] = 100  # 100 contracts for 10,000 shares
+            relevant_calls['contracts_needed'] = 109  # 109 contracts for 10,975 shares
             
             # Display top recommendations
             display_calls = relevant_calls.sort_values('volume', ascending=False).head(5)
@@ -406,7 +406,7 @@ class RIOTProtection:
                             'put_premium': put['lastPrice'],
                             'call_premium': call['lastPrice'],
                             'net_cost': net_cost,
-                            'total_cost': net_cost * self.user_position['shares'],  # Cost for 10,000 shares
+                            'total_cost': net_cost * self.user_position['shares'],  # Cost for 10,975 shares
                             'protection_level': ((put['strike'] / current_price) - 1) * 100,
                             'upside_cap': ((call['strike'] / current_price) - 1) * 100,
                             'call_expiration': '31 OCT 25',
@@ -577,7 +577,7 @@ class RIOTProtection:
             """)
         
         st.info("""
-        **💡 For your specific situation:** With 10,000 shares and NO CASH, start with covered calls to generate 
+        **💡 For your specific situation:** With 10,975 shares and NO CASH, start with covered calls to generate 
         income, then use zero-cost collars for protection. This approach maximizes your returns while protecting downside.
         """)
     
@@ -600,7 +600,7 @@ class RIOTProtection:
     def _render_income_scenarios(self, current_price):
         """Render income scenario analysis"""
         st.subheader("📊 Income Generation Scenarios")
-        st.markdown("### Monthly Income Potential from Your 10,000 RIOT Shares")
+        st.markdown("### Monthly Income Potential from Your 10,975 RIOT Shares")
         
         # Sample income scenarios
         scenarios = [
