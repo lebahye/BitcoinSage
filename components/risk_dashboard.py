@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from utils.risk_engine import RiskEngine
-from utils.data_fetcher import DataFetcher
+from utils.unified_data_fetcher import DataFetcher
 
 class RiskDashboard:
     """Professional Risk Management Dashboard"""
