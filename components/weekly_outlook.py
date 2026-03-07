@@ -4,7 +4,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from utils.unified_data_fetcher import DataFetcher
 from utils.options_analytics import OptionsAnalytics as OptionsAnalyzer
-from components.enhanced_technical import EnhancedTechnical
+from components.advanced_ta_dashboard import AdvancedTADashboard
 from components.sentiment_analysis import SentimentAnalysis
 from components.risk_management import RiskManagement
 
@@ -14,7 +14,7 @@ class WeeklyOutlook:
     def __init__(self):
         self.data_fetcher = DataFetcher()
         self.options_analyzer = OptionsAnalyzer()
-        self.enhanced_technical = EnhancedTechnical()
+        self.enhanced_technical = AdvancedTADashboard()
         self.sentiment_analysis = SentimentAnalysis()
         self.risk_management = RiskManagement()
     
