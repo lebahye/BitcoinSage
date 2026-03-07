@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utils.data_fetcher import DataFetcher
+from utils.unified_data_fetcher import DataFetcher
 
 class OptionsDashboard:
     """Options flow and put-call ratio analysis dashboard"""
