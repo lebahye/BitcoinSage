@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from utils.data_fetcher import DataFetcher
-from utils.options_analyzer import OptionsAnalyzer
+from utils.unified_data_fetcher import DataFetcher
+from utils.options_analytics import OptionsAnalytics as OptionsAnalyzer
 from components.enhanced_technical import EnhancedTechnical
 from components.sentiment_analysis import SentimentAnalysis
 from components.risk_management import RiskManagement
