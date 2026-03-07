@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from utils.data_fetcher import DataFetcher
+from utils.unified_data_fetcher import DataFetcher
 
 class PersonalPortfolio:
     """Personalized portfolio management for user's actual mining stock positions"""
