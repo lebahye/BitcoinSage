@@ -5,20 +5,32 @@ import plotly.express as px
 from datetime import datetime, timedelta
 import numpy as np
 from utils.polymarket_fetcher import PolymarketFetcher
+from utils.polymarket_live_feed import PolymarketLiveFeed
 
 
 class PolymarketTracker:
-    """Bitcoin Mining Prediction Markets Tracker using Polymarket data"""
+    """Bitcoin Mining Prediction Markets Tracker using Polymarket data + Live Arb Feed"""
     
     def __init__(self):
         self.polymarket = PolymarketFetcher()
+        self.live_feed = PolymarketLiveFeed()
     
     def render(self):
         """Render Bitcoin mining prediction markets interface"""
-        st.title("🎲 Bitcoin Mining Prediction Markets")
-        st.markdown("### Real-Time Betting Markets for Bitcoin Mining Sector")
+        st.title("📡 Bitcoin Mining Prediction Markets")
         
-        # Market overview metrics
+        # Main market tabs — live feed first
+        market_tab0, market_tab1, market_tab2, market_tab3 = st.tabs([
+            "🔴 Live Arb Signals",
+            "🔥 Active Markets", 
+            "📊 Market Analysis", 
+            "🎯 Mining Stocks Bets"
+        ])
+        
+        with market_tab0:
+            self._render_live_arb_feed()
+        
+        # Market overview metrics (REST)
         self._render_market_overview()
         
         # Main market tabs
@@ -37,6 +49,73 @@ class PolymarketTracker:
         with market_tab3:
             self._render_mining_stocks_bets()
     
+    def _render_live_arb_feed(self):
+        """Render live arbitrage signals from the arb scanner system."""
+        st.markdown("### 🔴 Live Polymarket Arbitrage Scanner")
+        st.caption("Real-time edge signals from WebSocket orderbook monitoring (BTC + ETH markets)")
+
+        summary = self.live_feed.get_summary()
+
+        if not summary["connected"]:
+            st.warning(f"⚠️ {summary['message']}")
+            st.info("The arb scanner system (scanner-btc-15min, scanner-eth-15min) must be running for live data.")
+            return
+
+        # Scanner health row
+        col1, col2, col3, col4 = st.columns(4)
+        scanners = summary.get("scanners", {})
+        btc_health = scanners.get("btc-15min", {})
+        eth_health = scanners.get("eth-15min", {})
+
+        btc_icon = "🟢" if btc_health.get("status") == "live" else "🔴"
+        eth_icon = "🟢" if eth_health.get("status") == "live" else "🔴"
+
+        with col1:
+            st.metric("BTC Scanner", f"{btc_icon} {btc_health.get('status', 'unknown').upper()}")
+        with col2:
+            st.metric("ETH Scanner", f"{eth_icon} {eth_health.get('status', 'unknown').upper()}")
+        with col3:
+            st.metric("Recent Signals", summary.get("recent_edges", 0))
+        with col4:
+            best = summary.get("best_edge_pct")
+            st.metric("Best Edge", f"{best:.2f}%" if best else "—")
+
+        st.divider()
+
+        # Live edge signals
+        edges = self.live_feed.get_latest_edges(count=25)
+        all_edges = []
+        for scanner_name, edge_list in edges.items():
+            for e in edge_list:
+                e["_scanner"] = scanner_name
+                all_edges.append(e)
+
+        if not all_edges:
+            st.info("No edge signals detected recently. Scanners are monitoring for YES + NO < $0.995 opportunities.")
+            return
+
+        # Sort by edge_pct descending
+        all_edges.sort(key=lambda x: float(x.get("edge_pct", 0)), reverse=True)
+
+        # Build display table
+        rows = []
+        for e in all_edges[:20]:
+            ts_ms = e.get("timestamp_ms")
+            ts_str = datetime.fromtimestamp(ts_ms / 1000).strftime("%H:%M:%S") if ts_ms else "—"
+            rows.append({
+                "Scanner": e.get("_scanner", "—"),
+                "Market ID": (e.get("market_id") or "—")[:16] + "...",
+                "YES Ask": f"${float(e.get('yes_ask', 0)):.4f}",
+                "NO Ask": f"${float(e.get('no_ask', 0)):.4f}",
+                "Combined": f"${float(e.get('combined_cost', 0)):.4f}",
+                "Edge %": f"{float(e.get('edge_pct', 0)):.3f}%",
+                "Time": ts_str,
+            })
+
+        df = pd.DataFrame(rows)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.caption(f"Last refreshed: {datetime.now().strftime('%H:%M:%S')} · Auto-refreshes on page interaction")
+
     def _render_market_overview(self):
         """Render market overview statistics"""
         st.markdown("### 📈 Bitcoin Mining Markets Overview")
