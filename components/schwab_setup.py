@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.enhanced_data_fetcher import EnhancedDataFetcher
+from utils.unified_data_fetcher import EnhancedDataFetcher
 
 class SchwabSetup:
     """Component for setting up Schwab API integration"""
