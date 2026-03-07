@@ -415,3 +415,178 @@ class OptionsAnalytics:
         except Exception as e:
             st.error(f"Error calculating IV term structure for {symbol}: {str(e)}")
             return {}
+
+
+    # -----------------------------------------------------------------------
+    # Flow analysis methods — ported from options_analyzer.py
+    # -----------------------------------------------------------------------
+
+    def analyze_put_call_ratio(self, calls_df, puts_df):
+        """Calculate put-call ratio and related metrics with caching"""
+        calls_hash = hash(str(calls_df.values.tobytes())) if calls_df is not None and not calls_df.empty else None
+        puts_hash  = hash(str(puts_df.values.tobytes()))  if puts_df  is not None and not puts_df.empty  else None
+        cache_key  = f"pcr_{calls_hash}_{puts_hash}"
+
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+
+        try:
+            if calls_df is None or puts_df is None or calls_df.empty or puts_df.empty:
+                return {'put_call_ratio': 0, 'call_volume': 0, 'put_volume': 0,
+                        'call_oi': 0, 'put_oi': 0, 'volatility_signal': 'No Data'}
+
+            call_volume = calls_df['volume'].fillna(0).sum()
+            put_volume  = puts_df['volume'].fillna(0).sum()
+            call_oi     = calls_df['openInterest'].fillna(0).sum()
+            put_oi      = puts_df['openInterest'].fillna(0).sum()
+
+            pc_ratio_volume = put_volume / call_volume if call_volume > 0 else 0
+            pc_ratio_oi     = put_oi / call_oi         if call_oi     > 0 else 0
+
+            result = {
+                'put_call_ratio':    pc_ratio_volume,
+                'put_call_ratio_oi': pc_ratio_oi,
+                'call_volume':  call_volume,
+                'put_volume':   put_volume,
+                'call_oi':      call_oi,
+                'put_oi':       put_oi,
+                'volatility_signal': self._interpret_pc_ratio(pc_ratio_volume),
+                'total_volume': call_volume + put_volume,
+                'total_oi':     call_oi + put_oi,
+            }
+            self.cache[cache_key] = result
+            return result
+
+        except Exception as e:
+            st.error(f"Error analyzing put-call ratio: {str(e)}")
+            return {'put_call_ratio': 0, 'call_volume': 0, 'put_volume': 0,
+                    'call_oi': 0, 'put_oi': 0, 'volatility_signal': 'Error'}
+
+    def _interpret_pc_ratio(self, ratio):
+        if ratio == 0:        return "No Data"
+        elif ratio > 1.2:     return "High Volatility Expected (Bearish)"
+        elif ratio > 0.8:     return "Moderate Volatility (Neutral)"
+        elif ratio > 0.6:     return "Low Volatility (Bullish)"
+        else:                 return "Very Bullish Sentiment"
+
+    def analyze_unusual_options_activity(self, calls_df, puts_df):
+        """Identify unusual options activity"""
+        try:
+            unusual_activity = []
+            for df, kind in [(calls_df, 'Call'), (puts_df, 'Put')]:
+                if df is not None and not df.empty:
+                    df = df.copy()
+                    df['volume_oi_ratio'] = df['volume'] / (df['openInterest'] + 1)
+                    unusual = df[df['volume_oi_ratio'] > 0.5]
+                    for _, row in unusual.head(5).iterrows():
+                        unusual_activity.append({
+                            'type':               kind,
+                            'strike':             row['strike'],
+                            'volume':             row['volume'],
+                            'open_interest':      row['openInterest'],
+                            'implied_volatility': row.get('impliedVolatility', 0),
+                            'last_price':         row.get('lastPrice', 0),
+                        })
+            return unusual_activity
+        except Exception as e:
+            st.error(f"Error analyzing unusual options activity: {str(e)}")
+            return []
+
+    def calculate_options_flow_metrics(self, calls_df, puts_df, current_price):
+        """Calculate options flow and smart money indicators"""
+        try:
+            metrics = {
+                'call_put_skew':          0,
+                'moneyness_distribution': {},
+                'iv_percentile':          0,
+                'smart_money_indicator':  'Neutral',
+            }
+            if calls_df is not None and not calls_df.empty:
+                atm_calls = calls_df[abs(calls_df['strike'] - current_price) <= current_price * 0.05]
+                if not atm_calls.empty:
+                    metrics['avg_call_iv'] = atm_calls['impliedVolatility'].mean()
+            if puts_df is not None and not puts_df.empty:
+                atm_puts = puts_df[abs(puts_df['strike'] - current_price) <= current_price * 0.05]
+                if not atm_puts.empty:
+                    metrics['avg_put_iv'] = atm_puts['impliedVolatility'].mean()
+            if calls_df is not None and puts_df is not None:
+                metrics['moneyness_distribution'] = self._calculate_moneyness_distribution(
+                    calls_df, puts_df, current_price)
+            metrics['smart_money_indicator'] = self._calculate_smart_money_indicator(
+                calls_df, puts_df, current_price)
+            return metrics
+        except Exception as e:
+            st.error(f"Error calculating options flow metrics: {str(e)}")
+            return {}
+
+    def _calculate_moneyness_distribution(self, calls_df, puts_df, current_price):
+        try:
+            distribution = {'deep_otm': 0, 'otm': 0, 'atm': 0, 'itm': 0, 'deep_itm': 0}
+            calls_c = calls_df.copy() if calls_df is not None and not calls_df.empty else pd.DataFrame()
+            puts_c  = puts_df.copy()  if puts_df  is not None and not puts_df.empty  else pd.DataFrame()
+            if not calls_c.empty: calls_c['option_type'] = 'call'
+            if not puts_c.empty:  puts_c['option_type']  = 'put'
+            all_opts = pd.concat([calls_c, puts_c], ignore_index=True)
+            if not all_opts.empty:
+                for _, opt in all_opts.iterrows():
+                    strike   = opt['strike']
+                    volume   = opt['volume'] if pd.notna(opt['volume']) else 0
+                    is_call  = opt.get('option_type') == 'call'
+                    itm      = (strike < current_price) if is_call else (strike > current_price)
+                    distance = abs(strike - current_price) / current_price
+                    if itm:
+                        distribution['deep_itm' if distance > 0.1 else 'itm'] += volume
+                    else:
+                        if distance <= 0.05:       distribution['atm']      += volume
+                        elif distance <= 0.15:     distribution['otm']      += volume
+                        else:                      distribution['deep_otm'] += volume
+            return distribution
+        except Exception as e:
+            st.error(f"Error calculating moneyness distribution: {str(e)}")
+            return {}
+
+    def _calculate_smart_money_indicator(self, calls_df, puts_df, current_price):
+        try:
+            if calls_df is None and puts_df is None:
+                return 'No Data'
+            score = 0
+            if calls_df is not None and not calls_df.empty:
+                large = calls_df[calls_df['volume'] > 100]
+                for _, t in large.iterrows():
+                    w = max(0, 1 - abs(t['strike'] - current_price) / current_price * 2)
+                    score += t['volume'] * w
+            if puts_df is not None and not puts_df.empty:
+                large = puts_df[puts_df['volume'] > 100]
+                for _, t in large.iterrows():
+                    w = max(0, 1 - abs(t['strike'] - current_price) / current_price * 2)
+                    score -= t['volume'] * w
+            if score > 1000:   return 'Strong Bullish Flow'
+            elif score > 500:  return 'Moderate Bullish Flow'
+            elif score > -500: return 'Neutral Flow'
+            elif score > -1000:return 'Moderate Bearish Flow'
+            else:              return 'Strong Bearish Flow'
+        except Exception as e:
+            st.error(f"Error calculating smart money indicator: {str(e)}")
+            return 'Error'
+
+    def get_volatility_forecast(self, put_call_ratio, iv_data=None):
+        """Forecast volatility based on options data"""
+        try:
+            forecast = {'volatility_outlook': 'Neutral', 'confidence': 'Medium', 'key_factors': []}
+            if put_call_ratio > 1.2:
+                forecast.update({'volatility_outlook': 'High Volatility Expected', 'confidence': 'High'})
+                forecast['key_factors'].append('Elevated put-call ratio indicates fear')
+            elif put_call_ratio < 0.6:
+                forecast.update({'volatility_outlook': 'Low Volatility Expected', 'confidence': 'Medium'})
+                forecast['key_factors'].append('Low put-call ratio suggests complacency')
+            if iv_data:
+                forecast['key_factors'].append('Implied volatility analysis included')
+            return forecast
+        except Exception as e:
+            st.error(f"Error generating volatility forecast: {str(e)}")
+            return {'volatility_outlook': 'Error', 'confidence': 'Low',
+                    'key_factors': ['Error in analysis']}
+
+
+# Backward-compatibility alias
+OptionsAnalyzer = OptionsAnalytics
