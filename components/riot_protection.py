@@ -598,25 +598,96 @@ class RIOTProtection:
         st.info("Roll covered calls monthly to maximize income while maintaining flexibility")
     
     def _render_income_scenarios(self, current_price):
-        """Render income scenario analysis"""
-        st.subheader("📊 Income Generation Scenarios")
-        st.markdown("### Monthly Income Potential from Your 10,975 RIOT Shares")
-        
-        # Sample income scenarios
-        scenarios = [
-            {"Strategy": "Conservative Covered Calls", "Monthly Income": "$2,000-$3,000", "Annual": "$24,000-$36,000", "Risk": "Low"},
-            {"Strategy": "Moderate Covered Calls", "Monthly Income": "$3,000-$5,000", "Annual": "$36,000-$60,000", "Risk": "Medium"},
-            {"Strategy": "Aggressive Covered Calls", "Monthly Income": "$5,000-$8,000", "Annual": "$60,000-$96,000", "Risk": "High"}
-        ]
-        
+        """Render income scenario analysis — uses REAL RIOT options chain premiums"""
+        import yfinance as yf
         import pandas as pd
-        scenarios_df = pd.DataFrame(scenarios)
-        st.dataframe(scenarios_df, use_container_width=True)
-        
-        st.success("""
-        **🎯 Recommended Approach:**
-        1. Start with conservative covered calls (2-4% out-of-the-money)
-        2. Generate $24,000-$36,000 annually without risking share ownership
-        3. Use income to fund protective strategies when needed
-        4. Scale up based on market conditions and your comfort level
-        """)
+        from datetime import datetime
+
+        st.subheader("📊 Income Generation Scenarios")
+        shares    = self.config['shares']
+        contracts = shares // 100
+
+        st.markdown(f"### Covered Call Income — Your {shares:,} RIOT Shares")
+        st.caption(f"Real-time options chain data · RIOT @ ${current_price:.2f}")
+
+        try:
+            ticker      = yf.Ticker('RIOT')
+            expirations = ticker.options
+            if not expirations:
+                st.warning("RIOT options unavailable — Yahoo Finance may be rate-limiting. Try refreshing.")
+                return
+
+            now   = datetime.now()
+            dated = []
+            for exp in expirations[:12]:
+                days = (datetime.strptime(exp, '%Y-%m-%d') - now).days
+                if days > 3:
+                    dated.append((days, exp))
+            if not dated:
+                st.warning("No valid expirations found.")
+                return
+
+            near = min(dated, key=lambda x: abs(x[0] - 10))
+            mid  = min(dated, key=lambda x: abs(x[0] - 30))
+            far  = min(dated, key=lambda x: abs(x[0] - 60))
+            exps = list({e[1]: e for e in [near, mid, far]}.values())
+
+            rows = []
+            for days, exp in exps:
+                try:
+                    calls = ticker.option_chain(exp).calls.copy()
+                    calls = calls[(calls['lastPrice'] > 0) & (calls['strike'] > 0)]
+                    if calls.empty:
+                        continue
+                    for label, otm in [('Conservative (2% OTM)', 0.02),
+                                       ('Moderate (4% OTM)',     0.04),
+                                       ('Aggressive (8% OTM)',   0.08)]:
+                        target  = current_price * (1 + otm)
+                        closest = calls.iloc[(calls['strike'] - target).abs().argsort()[:1]]
+                        if closest.empty:
+                            continue
+                        row     = closest.iloc[0]
+                        premium = float(row['lastPrice'])
+                        strike  = float(row['strike'])
+                        income  = premium * 100 * contracts
+                        annual  = income * (365 / max(days, 1))
+                        iv      = float(row.get('impliedVolatility', 0)) * 100
+                        rows.append({
+                            'Strategy':      label,
+                            'Expiry':        exp,
+                            'Days':          days,
+                            'Strike':        f'${strike:.2f}',
+                            'Premium/Share': f'${premium:.2f}',
+                            'Total Income':  f'${income:,.0f}',
+                            'Annualized':    f'${annual:,.0f}/yr',
+                            'IV':            f'{iv:.0f}%',
+                            'Upside Cap':    f'{((strike-current_price)/current_price)*100:.1f}%',
+                        })
+                except Exception:
+                    continue
+
+            if not rows:
+                st.warning("Could not load real premiums — market may be closed or data unavailable.")
+                return
+
+            df = pd.DataFrame(rows)
+            st.dataframe(df, use_container_width=True, hide_index=True)
+
+            mid_moderate = [r for r in rows if 'Moderate' in r['Strategy'] and abs(int(r['Days']) - 30) < 20]
+            if mid_moderate:
+                best    = mid_moderate[0]
+                inc_val = float(best['Total Income'].replace('$','').replace(',',''))
+                monthly = inc_val * 30 / max(1, int(best['Days']))
+                st.success(
+                    f"**Mid-term moderate: ~${monthly:,.0f}/month · ${monthly*12:,.0f}/year**  \n"
+                    f"Strike {best['Strike']} · {best['Premium/Share']}/share · {best['IV']} IV"
+                )
+
+            st.caption(
+                f"Source: Yahoo Finance live options chain · "
+                f"{contracts} contracts ({shares:,} shares) · "
+                "Premiums = last traded price"
+            )
+
+        except Exception as e:
+            st.error(f"Error fetching real options data: {e}")
