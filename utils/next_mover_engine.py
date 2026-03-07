@@ -6,9 +6,9 @@ Analyzes all 9 mining stocks to predict which will run next
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from utils.data_fetcher import DataFetcher
+from utils.unified_data_fetcher import DataFetcher
 from utils.advanced_ta import AdvancedTA
-from utils.options_analyzer import OptionsAnalyzer
+from utils.options_analytics import OptionsAnalytics as OptionsAnalyzer
 
 
 class NextMoverEngine:
