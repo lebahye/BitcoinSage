@@ -6,7 +6,7 @@ from utils.unified_data_fetcher import DataFetcher
 from utils.options_analytics import OptionsAnalytics as OptionsAnalyzer
 from components.advanced_ta_dashboard import AdvancedTADashboard
 from components.sentiment_analysis import SentimentAnalysis
-from components.risk_management import RiskManagement
+from components.risk_center import RiskCenter
 
 class WeeklyOutlook:
     """Weekly/Monthly price direction analysis component"""
@@ -16,7 +16,7 @@ class WeeklyOutlook:
         self.options_analyzer = OptionsAnalyzer()
         self.enhanced_technical = AdvancedTADashboard()
         self.sentiment_analysis = SentimentAnalysis()
-        self.risk_management = RiskManagement()
+        self.risk_management = RiskCenter()
     
     def render(self, selected_stocks, stock_names):
         """Render weekly/monthly outlook dashboard"""
