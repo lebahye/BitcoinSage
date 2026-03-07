@@ -9,20 +9,16 @@ from utils.unified_data_fetcher import DataFetcher
 from utils.options_analytics import OptionsAnalytics as OptionsAnalyzer
 from utils.chart_builder import ChartBuilder
 from components.stock_dashboard import StockDashboard
-from components.options_dashboard import OptionsDashboard
 from components.dark_pool_tracker import DarkPoolTracker
 from components.weekly_outlook import WeeklyOutlook
-from components.enhanced_technical import EnhancedTechnical
-from components.sentiment_dashboard import SentimentDashboard
-from components.risk_management import RiskManagement
-from components.options_evaluator import OptionsEvaluator
+from components.advanced_ta_dashboard import AdvancedTADashboard
+from components.unified_options import UnifiedOptions
+from components.sentiment_analysis import SentimentAnalysis
 from components.riot_protection import RIOTProtection
 from components.polymarket_tracker import PolymarketTracker
 from components.personal_portfolio import PersonalPortfolio
 from components.volatility_hole_chart import VolatilityHoleChart
-from components.advanced_ta_dashboard import AdvancedTADashboard
-from components.pro_options_dashboard import ProOptionsDashboard
-from components.risk_dashboard import RiskDashboard
+from components.risk_center import RiskCenter
 from components.backtesting_dashboard import BacktestingDashboard
 from components.next_mover_dashboard import NextMoverDashboard
 
@@ -174,8 +170,8 @@ def main():
             if not stock_data_available:
                 st.error("Options data requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
             else:
-                options_dashboard = OptionsDashboard()
-                options_dashboard.render(selected_stocks, options_analyzer, chart_builder)
+                unified_options = UnifiedOptions()
+                unified_options.render(selected_stocks, options_analyzer, chart_builder, MINING_STOCKS)
         
         # Tab 4: Dark Pool Activity
         with tab4:
@@ -197,8 +193,8 @@ def main():
             if not stock_data_available:
                 st.error("Enhanced TA requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
             else:
-                enhanced_technical = EnhancedTechnical()
-                enhanced_technical.render(selected_stocks, MINING_STOCKS)
+                advanced_ta_enhanced = AdvancedTADashboard()
+                advanced_ta_enhanced.render_enhanced(selected_stocks, MINING_STOCKS)
         
         # Tab 7: Advanced TA (Professional-grade indicators)
         with tab7:
@@ -213,21 +209,21 @@ def main():
             if not stock_data_available:
                 st.error("Options analytics requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
             else:
-                pro_options = ProOptionsDashboard()
-                pro_options.render(selected_stocks, MINING_STOCKS)
+                # pro_options merged into unified_options
+                unified_options.render(selected_stocks, options_analyzer, chart_builder, MINING_STOCKS)
         
         # Tab 9: News Sentiment Analysis (Alpha Vantage powered - WORKS WITHOUT YAHOO DATA)
         with tab9:
-            sentiment_dashboard = SentimentDashboard()
-            sentiment_dashboard.render(list(MINING_STOCKS.keys()))
+            sentiment_analysis = SentimentAnalysis()
+            sentiment_analysis.render(list(MINING_STOCKS.keys()))
         
         # Tab 10: Risk Management (Professional)
         with tab10:
             if not stock_data_available:
                 st.error("Risk analysis requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
             else:
-                risk_dashboard = RiskDashboard()
-                risk_dashboard.render(selected_stocks, MINING_STOCKS)
+                risk_center = RiskCenter()
+                risk_center.render(selected_stocks, MINING_STOCKS)
         
         # Tab 11: Market Outlook (Enhanced Weekly/Monthly)
         with tab11:
@@ -242,8 +238,8 @@ def main():
             if not stock_data_available:
                 st.error("Options evaluator requires stock data. Yahoo Finance rate limited - select fewer stocks or wait 30s and refresh.")
             else:
-                options_evaluator = OptionsEvaluator()
-                options_evaluator.render(selected_stocks, options_analyzer, chart_builder)
+                # options_evaluator merged into unified_options
+                unified_options.render(selected_stocks, options_analyzer, chart_builder, MINING_STOCKS)
         
         # Tab 13: RIOT Protection Strategies
         with tab13:
