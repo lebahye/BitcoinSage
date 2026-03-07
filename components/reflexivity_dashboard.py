@@ -389,7 +389,7 @@ class ReflexivityDashboard:
                     name="Coupling", line=dict(color="#cc88ff", width=2),
                     fill="tozeroy", fillcolor="rgba(200,136,255,.10)"
                 ), row=cur_row, col=1)
-                for lvl, col, lbl in [(0.7,"#00cc66","Strong"),(−0.7,"#ff4444","Strong bear")]:
+                for lvl, col, lbl in [(0.7,"#00cc66","Strong"),(-0.7,"#ff4444","Strong bear")]:
                     fig.add_hline(y=lvl, line_color=col, line_dash="dot",
                                   annotation_text=lbl, row=cur_row, col=1)
 
