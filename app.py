@@ -1,18 +1,17 @@
 """
 app.py — BitcoinSage Dashboard
-Phase 4: Clean 10-tab rebuild
+Phase 5: Polished — shared styles, cached components, loading states
 """
 
 import streamlit as st
 import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
 import time
 
 # Utils
 from utils.unified_data_fetcher import DataFetcher
 from utils.options_analytics import OptionsAnalytics as OptionsAnalyzer
 from utils.chart_builder import ChartBuilder
+from utils.styles import inject_styles, main_header, data_badge
 
 # Components
 from components.stock_dashboard import StockDashboard
@@ -29,7 +28,7 @@ from components.backtesting_dashboard import BacktestingDashboard
 from components.weekly_outlook import WeeklyOutlook
 from components.volatility_hole_chart import VolatilityHoleChart
 
-# ─── Page config ────────────────────────────────────────────────────────────
+# ─── Page config (must be first Streamlit call) ──────────────────────────────
 
 st.set_page_config(
     page_title="BitcoinSage",
@@ -37,39 +36,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 3rem;
-        font-weight: bold;
-        text-align: center;
-        margin-bottom: 2rem;
-        background: linear-gradient(90deg, #ff6b35, #f7931e, #ffcc02);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-    .metric-card {
-        background-color: #262730;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #00ff88;
-    }
-    .alert-box {
-        background-color: #ff4444;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 1rem 0;
-    }
-    .success-box {
-        background-color: #00ff88;
-        color: #000;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 1rem 0;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 # ─── Mining stocks ───────────────────────────────────────────────────────────
 
@@ -86,44 +52,159 @@ MINING_STOCKS = {
     'WULF': 'TeraWulf Inc',
 }
 
+# ─── Cached component instances (survive reruns, init once per session) ──────
+
+@st.cache_resource
+def get_data_fetcher():
+    return DataFetcher()
+
+@st.cache_resource
+def get_options_analyzer():
+    return OptionsAnalyzer()
+
+@st.cache_resource
+def get_chart_builder():
+    return ChartBuilder()
+
+@st.cache_resource
+def get_stock_dashboard():
+    return StockDashboard()
+
+@st.cache_resource
+def get_next_mover():
+    return NextMoverDashboard()
+
+@st.cache_resource
+def get_unified_options():
+    return UnifiedOptions()
+
+@st.cache_resource
+def get_dark_pool():
+    return DarkPoolTracker()
+
+@st.cache_resource
+def get_advanced_ta():
+    return AdvancedTADashboard()
+
+@st.cache_resource
+def get_polymarket():
+    return PolymarketTracker()
+
+@st.cache_resource
+def get_sentiment():
+    return SentimentAnalysis()
+
+@st.cache_resource
+def get_risk_center():
+    return RiskCenter()
+
+@st.cache_resource
+def get_portfolio():
+    return PersonalPortfolio()
+
+@st.cache_resource
+def get_riot():
+    return RIOTProtection()
+
+@st.cache_resource
+def get_backtesting():
+    return BacktestingDashboard()
+
+@st.cache_resource
+def get_weekly_outlook():
+    return WeeklyOutlook()
+
+@st.cache_resource
+def get_vol_hole():
+    return VolatilityHoleChart()
+
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+def _no_data_error(tab_name: str):
+    st.error(
+        f"**{tab_name}** requires live price data. "
+        "Yahoo Finance rate limit reached — select fewer stocks or refresh in 30 s."
+    )
+    st.info("✅ Tabs that work offline: 📡 Live Polymarket · 📰 Sentiment & News · 🔬 Backtesting")
+
+
+def _tab_error(tab_name: str, exc: Exception):
+    st.error(f"**{tab_name}** encountered an error: `{exc}`")
+    st.caption("Check the terminal for a full traceback.")
+
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main():
-    st.markdown('<h1 class="main-header">₿ BitcoinSage</h1>', unsafe_allow_html=True)
+    inject_styles()
+    main_header("₿ BitcoinSage")
 
     # ── Sidebar ──────────────────────────────────────────────────────────────
-    st.sidebar.title("🔧 Dashboard Controls")
+    st.sidebar.title("🔧 Controls")
 
     selected_stocks = st.sidebar.multiselect(
-        "Select Mining Stocks",
+        "Mining Stocks",
         options=list(MINING_STOCKS.keys()),
         default=['MARA', 'RIOT', 'CLSK', 'HUT'],
-        help="Choose bitcoin mining stocks to track"
+        help="Select up to 10 Bitcoin mining stocks"
     )
 
     time_range = st.sidebar.selectbox(
         "Time Range",
         options=['1D', '5D', '1M', '3M', '6M', '1Y'],
         index=2,
-        help="Select data time range"
     )
 
-    auto_refresh = st.sidebar.checkbox("Auto Refresh (30s)", value=False)
+    auto_refresh = st.sidebar.checkbox("Auto Refresh (30 s)", value=False)
 
-    if st.sidebar.button("🔄 Refresh Data"):
+    if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
+        st.cache_data.clear()
         st.rerun()
 
+    st.sidebar.markdown("---")
+
     if not selected_stocks:
-        st.warning("Please select at least one mining stock.")
+        st.warning("👈 Select at least one mining stock from the sidebar.")
         return
 
     # ── Shared instances ─────────────────────────────────────────────────────
-    data_fetcher     = DataFetcher()
-    options_analyzer = OptionsAnalyzer()
-    chart_builder    = ChartBuilder()
+    data_fetcher     = get_data_fetcher()
+    options_analyzer = get_options_analyzer()
+    chart_builder    = get_chart_builder()
 
-    # ── Tabs ─────────────────────────────────────────────────────────────────
+    # ── Fetch stock data ─────────────────────────────────────────────────────
+    stock_data_available = False
+    stock_data = pd.DataFrame()
+
+    with st.spinner("📡 Fetching market data…"):
+        try:
+            stock_data = data_fetcher.get_stock_data(selected_stocks, time_range)
+            stock_data_available = not stock_data.empty
+        except Exception as e:
+            st.warning(f"⚠️ Data fetch error: {e}")
+
+    # Data source badge in sidebar
+    with st.sidebar:
+        if stock_data_available:
+            source = "live" if getattr(data_fetcher, 'using_schwab', False) else "delayed"
+        else:
+            source = "offline"
+        data_badge(source)
+        if source == "delayed":
+            st.caption("Yahoo Finance (15-min delay)")
+        elif source == "live":
+            st.caption("Schwab API (real-time)")
+        else:
+            st.caption("Rate limited — refresh soon")
+
+    if not stock_data_available:
+        st.warning(
+            "⚠️ Price data unavailable (Yahoo Finance rate limit). "
+            "**Live Polymarket**, **Sentiment & News**, and **Backtesting** still work."
+        )
+
+    # ── 10 Tabs ──────────────────────────────────────────────────────────────
     tabs = st.tabs([
         "📊 Market Overview",
         "🎯 AI Predictions",
@@ -137,173 +218,177 @@ def main():
         "🔬 Strategy Lab",
     ])
 
-    tab_market, tab_ai, tab_options, tab_flow, tab_ta, \
-    tab_poly, tab_sentiment, tab_risk, tab_portfolio, tab_lab = tabs
+    (tab_market, tab_ai, tab_options, tab_flow, tab_ta,
+     tab_poly, tab_sentiment, tab_risk, tab_portfolio, tab_lab) = tabs
 
-    # ── Fetch shared stock data once ─────────────────────────────────────────
-    with st.spinner("Fetching market data..."):
-        try:
-            stock_data = data_fetcher.get_stock_data(selected_stocks, time_range)
-            stock_data_available = not stock_data.empty
-        except Exception as e:
-            stock_data = pd.DataFrame()
-            stock_data_available = False
-            st.warning(f"⚠️ Data fetch error: {e}")
-
-    if not stock_data_available:
-        st.warning(
-            "⚠️ Yahoo Finance rate limit reached. Tabs requiring price data are disabled. "
-            "Try selecting fewer stocks or refreshing in 30 seconds. "
-            "**Working tabs:** 📡 Live Polymarket · 📰 Sentiment & News · 🔬 Strategy Lab (Backtesting)"
-        )
-
-    # ── Tab 1 — Market Overview ───────────────────────────────────────────────
+    # ── 1 · Market Overview ───────────────────────────────────────────────────
     with tab_market:
         if not stock_data_available:
-            st.error("Stock data unavailable. Select fewer stocks or refresh.")
+            _no_data_error("Market Overview")
         else:
-            StockDashboard().render(stock_data, selected_stocks, MINING_STOCKS, chart_builder)
+            with st.spinner("Loading market overview…"):
+                try:
+                    get_stock_dashboard().render(
+                        stock_data, selected_stocks, MINING_STOCKS, chart_builder)
+                except Exception as e:
+                    _tab_error("Market Overview", e)
 
-    # ── Tab 2 — AI Predictions ────────────────────────────────────────────────
+    # ── 2 · AI Predictions ────────────────────────────────────────────────────
     with tab_ai:
-        try:
-            NextMoverDashboard().render(data_fetcher, options_analyzer)
-        except Exception as e:
-            st.error(f"AI Predictions error: {e}")
+        with st.spinner("Running AI prediction engine…"):
+            try:
+                get_next_mover().render(data_fetcher, options_analyzer)
+            except Exception as e:
+                _tab_error("AI Predictions", e)
 
-    # ── Tab 3 — Options Center ────────────────────────────────────────────────
+    # ── 3 · Options Center ────────────────────────────────────────────────────
     with tab_options:
         if not stock_data_available:
-            st.error("Options data requires stock data. Refresh when rate limit clears.")
+            _no_data_error("Options Center")
         else:
-            try:
-                UnifiedOptions().render(
-                    selected_stocks, options_analyzer, chart_builder, MINING_STOCKS
-                )
-            except Exception as e:
-                st.error(f"Options Center error: {e}")
+            with st.spinner("Loading options data…"):
+                try:
+                    get_unified_options().render(
+                        selected_stocks, options_analyzer, chart_builder, MINING_STOCKS)
+                except Exception as e:
+                    _tab_error("Options Center", e)
 
-    # ── Tab 4 — Institutional Flow ────────────────────────────────────────────
+    # ── 4 · Institutional Flow ────────────────────────────────────────────────
     with tab_flow:
         if not stock_data_available:
-            st.error("Dark pool analysis requires stock data.")
+            _no_data_error("Institutional Flow")
         else:
-            try:
-                DarkPoolTracker().render(selected_stocks, data_fetcher, chart_builder)
-            except Exception as e:
-                st.error(f"Institutional Flow error: {e}")
+            with st.spinner("Analyzing dark pool activity…"):
+                try:
+                    get_dark_pool().render(selected_stocks, data_fetcher, chart_builder)
+                except Exception as e:
+                    _tab_error("Institutional Flow", e)
 
-    # ── Tab 5 — Technical Analysis ─────────────────────────────────────────────
+    # ── 5 · Technical Analysis ────────────────────────────────────────────────
     with tab_ta:
         if not stock_data_available:
-            st.error("Technical analysis requires stock data.")
+            _no_data_error("Technical Analysis")
         else:
-            try:
-                ta = AdvancedTADashboard()
-                sub_standard, sub_advanced = st.tabs([
-                    "📊 Standard Indicators",
-                    "⚡ Advanced TA (Pro)"
-                ])
-                with sub_standard:
-                    ta.render_enhanced(selected_stocks, MINING_STOCKS)
-                with sub_advanced:
-                    ta.render(selected_stocks, MINING_STOCKS)
-            except Exception as e:
-                st.error(f"Technical Analysis error: {e}")
+            sub_std, sub_adv = st.tabs(["📊 Standard Indicators", "⚡ Advanced TA (Pro)"])
+            ta = get_advanced_ta()
+            with sub_std:
+                with st.spinner("Computing technical indicators…"):
+                    try:
+                        ta.render_enhanced(selected_stocks, MINING_STOCKS)
+                    except Exception as e:
+                        _tab_error("Standard Indicators", e)
+            with sub_adv:
+                with st.spinner("Computing advanced indicators…"):
+                    try:
+                        ta.render(selected_stocks, MINING_STOCKS)
+                    except Exception as e:
+                        _tab_error("Advanced TA", e)
 
-    # ── Tab 6 — Live Polymarket ────────────────────────────────────────────────
+    # ── 6 · Live Polymarket ────────────────────────────────────────────────────
     with tab_poly:
-        try:
-            PolymarketTracker().render()
-        except Exception as e:
-            st.error(f"Polymarket error: {e}")
+        with st.spinner("Connecting to Polymarket feed…"):
+            try:
+                get_polymarket().render()
+            except Exception as e:
+                _tab_error("Live Polymarket", e)
 
-    # ── Tab 7 — Sentiment & News ───────────────────────────────────────────────
+    # ── 7 · Sentiment & News ──────────────────────────────────────────────────
     with tab_sentiment:
-        try:
-            SentimentAnalysis().render(list(MINING_STOCKS.keys()))
-        except Exception as e:
-            st.error(f"Sentiment error: {e}")
+        with st.spinner("Fetching news sentiment…"):
+            try:
+                get_sentiment().render(list(MINING_STOCKS.keys()))
+            except Exception as e:
+                _tab_error("Sentiment & News", e)
 
-    # ── Tab 8 — Risk Center ────────────────────────────────────────────────────
+    # ── 8 · Risk Center ───────────────────────────────────────────────────────
     with tab_risk:
         if not stock_data_available:
-            st.error("Risk analysis requires stock data.")
+            _no_data_error("Risk Center")
         else:
-            try:
-                RiskCenter().render(selected_stocks, MINING_STOCKS)
-            except Exception as e:
-                st.error(f"Risk Center error: {e}")
+            with st.spinner("Calculating risk metrics…"):
+                try:
+                    get_risk_center().render(selected_stocks, MINING_STOCKS)
+                except Exception as e:
+                    _tab_error("Risk Center", e)
 
-    # ── Tab 9 — Portfolio ──────────────────────────────────────────────────────
+    # ── 9 · Portfolio ─────────────────────────────────────────────────────────
     with tab_portfolio:
         if not stock_data_available:
-            st.error("Portfolio tracking requires stock data.")
+            _no_data_error("Portfolio")
         else:
-            try:
-                sub_portfolio, sub_riot = st.tabs([
-                    "🏆 Your Portfolio",
-                    "🛡️ RIOT Protection"
-                ])
-                with sub_portfolio:
-                    PersonalPortfolio().render(data_fetcher, options_analyzer)
-                with sub_riot:
-                    RIOTProtection().render(data_fetcher, options_analyzer)
-            except Exception as e:
-                st.error(f"Portfolio error: {e}")
+            sub_port, sub_riot = st.tabs(["🏆 Your Portfolio", "🛡️ RIOT Protection"])
+            with sub_port:
+                with st.spinner("Loading portfolio…"):
+                    try:
+                        get_portfolio().render(data_fetcher, options_analyzer)
+                    except Exception as e:
+                        _tab_error("Portfolio", e)
+            with sub_riot:
+                with st.spinner("Loading RIOT protection strategies…"):
+                    try:
+                        get_riot().render(data_fetcher, options_analyzer)
+                    except Exception as e:
+                        _tab_error("RIOT Protection", e)
 
-    # ── Tab 10 — Strategy Lab ──────────────────────────────────────────────────
+    # ── 10 · Strategy Lab ─────────────────────────────────────────────────────
     with tab_lab:
-        try:
-            sub_backtest, sub_outlook, sub_volhole = st.tabs([
-                "🔬 Backtesting",
-                "🔮 Market Outlook",
-                "🕳️ Volatility Hole"
-            ])
+        sub_bt, sub_out, sub_vol = st.tabs([
+            "🔬 Backtesting",
+            "🔮 Market Outlook",
+            "🕳️ Volatility Hole",
+        ])
 
-            with sub_backtest:
-                BacktestingDashboard().render(selected_stocks, MINING_STOCKS)
+        with sub_bt:
+            with st.spinner("Loading backtesting engine…"):
+                try:
+                    get_backtesting().render(selected_stocks, MINING_STOCKS)
+                except Exception as e:
+                    _tab_error("Backtesting", e)
 
-            with sub_outlook:
-                if not stock_data_available:
-                    st.error("Market outlook requires stock data.")
-                else:
-                    WeeklyOutlook().render(selected_stocks, MINING_STOCKS)
+        with sub_out:
+            if not stock_data_available:
+                _no_data_error("Market Outlook")
+            else:
+                with st.spinner("Generating market outlook…"):
+                    try:
+                        get_weekly_outlook().render(selected_stocks, MINING_STOCKS)
+                    except Exception as e:
+                        _tab_error("Market Outlook", e)
 
-            with sub_volhole:
-                if not stock_data_available:
-                    st.error("Volatility hole analysis requires stock data.")
-                else:
-                    st.title("🕳️ Volatility Hole Indicator")
-                    st.markdown("### Danny Cheng's Favorite — Spots Low Volatility Before Major Moves")
-                    st.info("""
-                    **What You'll See:**
-                    - 🟡 **Yellow lines** = Volatility holes (consolidation zones)
-                    - 🔥 **Breakout markers** = When the hole releases (up or down)
-                    - 📊 **Score below 25** = hole forming | **above 75** = breakout
-                    """)
-                    vol_hole = VolatilityHoleChart()
-                    for symbol in selected_stocks:
-                        with st.expander(
-                            f"📈 {symbol} - Volatility Hole Analysis",
-                            expanded=(symbol == selected_stocks[0])
-                        ):
-                            vol_hole.render(symbol, data_fetcher)
-
-        except Exception as e:
-            st.error(f"Strategy Lab error: {e}")
+        with sub_vol:
+            if not stock_data_available:
+                _no_data_error("Volatility Hole")
+            else:
+                st.subheader("🕳️ Volatility Hole Indicator")
+                st.caption("Danny Cheng's favorite — identifies low-volatility consolidation before major moves.")
+                st.info(
+                    "🟡 **Yellow lines** = consolidation zone  |  "
+                    "🔥 **Breakout markers** = hole releases  |  "
+                    "Score **< 25** = hole forming  |  Score **> 75** = breakout"
+                )
+                vh = get_vol_hole()
+                for symbol in selected_stocks:
+                    with st.expander(
+                        f"📈 {symbol} — {MINING_STOCKS.get(symbol, symbol)}",
+                        expanded=(symbol == selected_stocks[0])
+                    ):
+                        with st.spinner(f"Analyzing {symbol}…"):
+                            try:
+                                vh.render(symbol, data_fetcher)
+                            except Exception as e:
+                                _tab_error(f"Volatility Hole ({symbol})", e)
 
     # ── Auto-refresh ──────────────────────────────────────────────────────────
     if auto_refresh:
         if 'last_refresh' not in st.session_state:
             st.session_state.last_refresh = time.time()
-        current_time = time.time()
-        elapsed = current_time - st.session_state.last_refresh
+        elapsed = time.time() - st.session_state.last_refresh
         if elapsed >= 30:
-            st.session_state.last_refresh = current_time
+            st.session_state.last_refresh = time.time()
+            st.cache_data.clear()
             st.rerun()
         else:
-            st.sidebar.info(f"Next refresh in {30 - elapsed:.0f}s")
+            st.sidebar.caption(f"↻ Refresh in {30 - elapsed:.0f} s")
 
 
 if __name__ == "__main__":
