@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 import time
 
 # Import custom modules
-from utils.data_fetcher import DataFetcher
-from utils.options_analyzer import OptionsAnalyzer
+from utils.unified_data_fetcher import DataFetcher
+from utils.options_analytics import OptionsAnalytics as OptionsAnalyzer
 from utils.chart_builder import ChartBuilder
 from components.stock_dashboard import StockDashboard
 from components.options_dashboard import OptionsDashboard
