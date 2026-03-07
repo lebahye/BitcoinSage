@@ -27,6 +27,7 @@ from components.riot_protection import RIOTProtection
 from components.backtesting_dashboard import BacktestingDashboard
 from components.weekly_outlook import WeeklyOutlook
 from components.volatility_hole_chart import VolatilityHoleChart
+from components.reflexivity_dashboard import ReflexivityDashboard
 
 # ─── Page config (must be first Streamlit call) ──────────────────────────────
 
@@ -117,6 +118,10 @@ def get_weekly_outlook():
 @st.cache_resource
 def get_vol_hole():
     return VolatilityHoleChart()
+
+@st.cache_resource
+def get_reflexivity():
+    return ReflexivityDashboard()
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -216,10 +221,12 @@ def main():
         "⚠️ Risk Center",
         "🏆 Portfolio",
         "🔬 Strategy Lab",
+        "🔄 Reflexivity",
     ])
 
     (tab_market, tab_ai, tab_options, tab_flow, tab_ta,
-     tab_poly, tab_sentiment, tab_risk, tab_portfolio, tab_lab) = tabs
+     tab_poly, tab_sentiment, tab_risk, tab_portfolio, tab_lab,
+     tab_reflex) = tabs
 
     # ── 1 · Market Overview ───────────────────────────────────────────────────
     with tab_market:
@@ -377,6 +384,14 @@ def main():
                                 vh.render(symbol, data_fetcher)
                             except Exception as e:
                                 _tab_error(f"Volatility Hole ({symbol})", e)
+
+    # ── 11 · Reflexivity ──────────────────────────────────────────────────────
+    with tab_reflex:
+        with st.spinner("Computing reflexivity metrics…"):
+            try:
+                get_reflexivity().render(selected_stocks, MINING_STOCKS)
+            except Exception as e:
+                _tab_error("Reflexivity", e)
 
     # ── Auto-refresh ──────────────────────────────────────────────────────────
     if auto_refresh:
