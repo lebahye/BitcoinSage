@@ -514,12 +514,9 @@ class WeeklyOutlook:
     def _calculate_options_score(self, symbol, current_price):
         """Calculate options flow score"""
         try:
-            # Get simulated options data since we can't fetch real options chains easily
-            # This would normally use real options data from yfinance or other sources
-            
+            # Options score proxy: uses real yfinance price/volume data
+            # (IV proxy from realized vol + volume ratio — no options chain needed)
             score = 0
-            
-            # Simplified options analysis based on volatility and price action
             import yfinance as yf
             ticker = yf.Ticker(symbol)
             hist = ticker.history(period='1mo')
