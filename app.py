@@ -303,7 +303,7 @@ def main():
     with tab_sentiment:
         with st.spinner("Fetching news sentiment…"):
             try:
-                get_sentiment().render(list(MINING_STOCKS.keys()))
+                get_sentiment().render(selected_stocks, MINING_STOCKS)
             except Exception as e:
                 _tab_error("Sentiment & News", e)
 
