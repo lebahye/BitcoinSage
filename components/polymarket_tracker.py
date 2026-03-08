@@ -1,4 +1,5 @@
 import streamlit as st
+from utils.styles import data_lineage_panel
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
@@ -18,6 +19,7 @@ class PolymarketTracker:
     def render(self):
         """Render Bitcoin mining prediction markets interface"""
         st.title("📡 Bitcoin Mining Prediction Markets")
+        data_lineage_panel(["<strong>Direct:</strong> Polymarket REST data when available", "<strong>Live:</strong> Redis stream feed if arb scanners are running", "<strong>Freshness risk:</strong> blank live feed usually means Redis/scanner inactivity, not fake data", "<strong>Validation:</strong> use healthcheck.py to confirm Redis keys and stream freshness"], title="Polymarket Data Quality")
         
         # Main market tabs — live feed first
         market_tab0, market_tab1, market_tab2, market_tab3 = st.tabs([
