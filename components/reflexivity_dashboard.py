@@ -6,6 +6,8 @@ Works entirely from yfinance price data — no external APIs required.
 Blockchain.info hashrate/difficulty used as enhancement only (fails gracefully).
 """
 
+from utils.styles import data_lineage_panel
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -145,6 +147,7 @@ class ReflexivityDashboard:
 
     def render(self, selected_stocks: list, stock_names: dict):
         st.header("🔄 Reflexivity Analysis")
+        data_lineage_panel(["<strong>Direct:</strong> BTC + miner prices from Yahoo Finance", "<strong>Optional direct:</strong> blockchain.info hashrate/difficulty if reachable", "<strong>Estimated:</strong> miner breakeven, margin, and reflexivity composite index", "<strong>Fallback:</strong> when network data fails, charts still run on price-only mode"], title="Reflexivity Data Quality")
         st.markdown(
             "> *\"Markets are always biased in one direction or another. "
             "The trend is your friend until the reflexive process reverses.\"*  \n"
