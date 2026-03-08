@@ -139,6 +139,66 @@ def _tab_error(tab_name: str, exc: Exception):
     st.caption("Check the terminal for a full traceback.")
 
 
+def _render_command_center(selected_stocks, stock_data, stock_data_available, data_fetcher):
+    """Top-level command center: source, freshness, BTC pulse, sector pulse."""
+    st.subheader("🧭 Command Center")
+
+    source_label = (
+        "Schwab (real-time)" if getattr(data_fetcher, 'using_schwab', False) and stock_data_available
+        else "Yahoo Finance (delayed)" if stock_data_available
+        else "Offline / rate-limited"
+    )
+
+    last_update = "N/A"
+    sector_change = None
+    if stock_data_available and not stock_data.empty:
+        try:
+            last_idx = stock_data.index[-1]
+            last_update = str(last_idx)[:19]
+            if len(stock_data) > 1:
+                latest = stock_data.iloc[-1].mean()
+                prev = stock_data.iloc[-2].mean()
+                sector_change = ((latest - prev) / prev) * 100 if prev else 0
+        except Exception:
+            pass
+
+    btc_price = None
+    btc_change = None
+    vix = None
+    try:
+        sentiment = data_fetcher.get_market_sentiment()
+        btc_price = sentiment.get('btc_price')
+        btc_change = sentiment.get('btc_change')
+        vix = sentiment.get('vix')
+    except Exception:
+        pass
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        st.metric("Data Source", source_label)
+    with c2:
+        st.metric("Selected Miners", len(selected_stocks))
+    with c3:
+        st.metric("Last Price Update", last_update)
+    with c4:
+        if btc_price is not None:
+            st.metric("BTC", f"${btc_price:,.0f}", f"{btc_change:+.2f}%")
+        else:
+            st.metric("BTC", "N/A")
+    with c5:
+        if sector_change is not None:
+            st.metric("Sector Pulse", f"{sector_change:+.2f}%")
+        elif vix is not None:
+            st.metric("VIX", f"{vix:.2f}")
+        else:
+            st.metric("Sector Pulse", "N/A")
+
+    if not stock_data_available:
+        st.warning("Price feed degraded. Use healthcheck.py before trusting analytics-heavy tabs.")
+    else:
+        st.caption("Use this strip as your quick read before diving into tabs.")
+
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -208,6 +268,8 @@ def main():
             "⚠️ Price data unavailable (Yahoo Finance rate limit). "
             "**Live Polymarket**, **Sentiment & News**, and **Backtesting** still work."
         )
+
+    _render_command_center(selected_stocks, stock_data, stock_data_available, data_fetcher)
 
     # ── 10 Tabs ──────────────────────────────────────────────────────────────
     tabs = st.tabs([
