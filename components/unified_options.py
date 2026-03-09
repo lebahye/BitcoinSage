@@ -5,7 +5,7 @@ UnifiedOptions combines options flow analysis, professional IV/Greeks analytics,
 and purchase recommendations into a single tabbed component.
 """
 
-from utils.styles import data_lineage_panel, freshness_note
+from utils.styles import data_lineage_panel, freshness_note, market_hours_note
 
 import streamlit as st
 import pandas as pd
@@ -33,6 +33,7 @@ class UnifiedOptions:
         st.header("⚡ Options Center")
         data_lineage_panel(["<strong>Direct:</strong> Yahoo Finance options chain + stock price", "<strong>Estimated:</strong> volatility forecast and evaluator scoring", "<strong>Freshness risk:</strong> options premiums may be stale outside market hours", "<strong>Execution note:</strong> displayed premiums are analytical, not guaranteed fills"], title="Options Data Quality")
         freshness_note("Options chains fetched on demand", "best during market hours; check spreads before execution")
+        market_hours_note("options")
 
         tab1, tab2, tab3, tab4 = st.tabs([
             "📊 Options Flow",
