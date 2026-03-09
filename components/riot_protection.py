@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.styles import data_lineage_panel, freshness_note
+from utils.styles import data_lineage_panel, freshness_note, market_hours_note
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
@@ -22,6 +22,7 @@ class RIOTProtection:
         st.title("🛡️ RIOT Share Protection Strategies")
         data_lineage_panel(["<strong>Direct:</strong> RIOT price and options chain via Yahoo Finance", "<strong>Freshness risk:</strong> option quotes may be stale outside market hours", "<strong>Estimated:</strong> annualized income and scenario summaries", "<strong>Execution note:</strong> use bid/ask and liquidity before placing trades"], title="RIOT Protection Data Quality")
         freshness_note("RIOT options quotes fetched at render time", "weekends/after-hours can show stale last-trade premiums")
+        market_hours_note("options")
         st.markdown("### Protecting Your 10,975 RIOT Shares WITHOUT CASH - Generate Income!")
         
         # Get real-time RIOT data FIRST
