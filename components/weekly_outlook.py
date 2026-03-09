@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.styles import data_lineage_panel
+from utils.styles import data_lineage_panel, freshness_note
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -28,6 +28,7 @@ class WeeklyOutlook:
         with col1:
             st.subheader("🔮 Price Direction Outlook")
             data_lineage_panel(["<strong>Direct:</strong> Yahoo Finance price + volume inputs", "<strong>Proxy:</strong> options-flow score uses price/volatility proxy when full options context is unavailable", "<strong>Estimated:</strong> combined outlook score and price target are model outputs", "<strong>Use:</strong> directional framework, not a guarantee"], title="Weekly Outlook Data Quality")
+            freshness_note("Price/volume snapshot fetched at render time", "model outputs may remain valid longer than raw quotes")
             st.write("Comprehensive analysis combining all data sources for intelligent price predictions.")
         
         with col2:
