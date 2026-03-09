@@ -10,7 +10,7 @@ from components.sentiment_analysis import SentimentAnalysis
 from components.risk_center import RiskCenter
 
 class WeeklyOutlook:
-    """Weekly/Monthly price direction analysis component"""
+    """Forecast center for weekly / monthly / quarterly price action"""
     
     def __init__(self):
         self.data_fetcher = DataFetcher()
@@ -20,13 +20,13 @@ class WeeklyOutlook:
         self.risk_management = RiskCenter()
     
     def render(self, selected_stocks, stock_names):
-        """Render weekly/monthly outlook dashboard"""
+        """Render forecast center dashboard"""
         
         # Time period selector
         col1, col2 = st.columns([3, 1])
         
         with col1:
-            st.subheader("🔮 Price Direction Outlook")
+            st.subheader("🔮 Forecast Center")
             data_lineage_panel(["<strong>Direct:</strong> Yahoo Finance price + volume inputs", "<strong>Proxy:</strong> options-flow score uses price/volatility proxy when full options context is unavailable", "<strong>Estimated:</strong> combined outlook score and price target are model outputs", "<strong>Use:</strong> directional framework, not a guarantee"], title="Weekly Outlook Data Quality")
             freshness_note("Price/volume snapshot fetched at render time", "model outputs may remain valid longer than raw quotes")
             st.write("Comprehensive analysis combining all data sources for intelligent price predictions.")
@@ -34,14 +34,14 @@ class WeeklyOutlook:
         with col2:
             time_frame = st.selectbox(
                 "Analysis Period",
-                ["Weekly", "Monthly"],
+                ["Weekly", "Monthly", "Quarterly"],
                 index=0,
                 help="Choose prediction timeframe"
             )
         
         # Dynamic title based on selection
-        period_emoji = "📅" if time_frame == "Weekly" else "📆"
-        st.markdown(f"### {period_emoji} {time_frame} Market Direction Analysis")
+        period_emoji = "📅" if time_frame == "Weekly" else "📆" if time_frame == "Monthly" else "🗓️"
+        st.markdown(f"### {period_emoji} {time_frame} Price Action Forecast")
         
         # Disclaimer
         with st.expander("⚠️ Important Disclaimer", expanded=False):
@@ -75,6 +75,20 @@ class WeeklyOutlook:
         if outlook_data:
             # Summary overview
             self._render_sector_summary(outlook_data, time_frame)
+
+            st.subheader("🎯 Forecast Table")
+            table_df = pd.DataFrame([
+                {
+                    'Symbol': x['symbol'],
+                    'Direction': x['direction'],
+                    'Confidence': f"{x['confidence']}%",
+                    'Target': f"${x['price_target']:.2f}",
+                    'Range': f"${x['range_low']:.2f} - ${x['range_high']:.2f}",
+                    'Score': f"{x['score']:+.1f}",
+                }
+                for x in sorted(outlook_data, key=lambda x: x['score'], reverse=True)
+            ])
+            st.dataframe(table_df, use_container_width=True, hide_index=True)
             
             # Individual stock outlooks
             st.subheader("📊 Individual Stock Outlooks")
@@ -100,11 +114,14 @@ class WeeklyOutlook:
                 'risk_score': 0,
                 'time_frame': time_frame,
                 'price_target': 0,
-                'probability': 0
+                'probability': 0,
+                'range_low': 0,
+                'range_high': 0
             }
             
             # Get stock data for analysis
-            period = '2M' if time_frame == 'Monthly' else '1M'
+            period_map = {'Weekly': '1M', 'Monthly': '3M', 'Quarterly': '6M'}
+            period = period_map.get(time_frame, '1M')
             stock_data = self.data_fetcher.get_stock_data([symbol], period)
             if stock_data.empty or symbol not in stock_data.columns:
                 return None
@@ -142,6 +159,7 @@ class WeeklyOutlook:
             # Calculate price target and probability
             outlook['price_target'] = self._calculate_price_target(current_price, total_score, time_frame)
             outlook['probability'] = self._calculate_probability(total_score, time_frame)
+            outlook['range_low'], outlook['range_high'] = self._calculate_price_range(current_price, total_score, time_frame, outlook['probability'])
             
             # Determine direction and confidence (Enhanced with better thresholds)
             if total_score >= 3:
@@ -275,41 +293,39 @@ class WeeklyOutlook:
             return 0
     
     def _calculate_price_target(self, current_price, total_score, time_frame):
-        """Calculate price target based on score and timeframe"""
+        """Calculate directional target based on score and horizon."""
         try:
-            # Base movement percentage based on score strength
-            base_move = abs(total_score) * 0.05  # 5% per point
-            
-            # Adjust for timeframe
-            if time_frame == 'Monthly':
-                base_move *= 2.0  # Monthly targets can be larger
-            
-            # Direction
-            if total_score > 0:
-                target = current_price * (1 + base_move)
-            else:
-                target = current_price * (1 - base_move)
-            
+            base_move = abs(total_score) * 0.05
+            horizon_mult = {'Weekly': 1.0, 'Monthly': 2.0, 'Quarterly': 3.5}.get(time_frame, 1.0)
+            base_move *= horizon_mult
+            target = current_price * (1 + base_move) if total_score > 0 else current_price * (1 - base_move)
             return round(target, 2)
-            
-        except Exception as e:
+        except Exception:
             return current_price
-    
+
     def _calculate_probability(self, total_score, time_frame):
-        """Calculate probability of direction based on score"""
+        """Calculate confidence probability by horizon."""
         try:
-            # Base probability from score strength
             base_prob = min(95, 50 + abs(total_score) * 8)
-            
-            # Adjust for timeframe (longer term is less certain)
-            if time_frame == 'Monthly':
-                base_prob *= 0.9
-            
-            return round(base_prob)
-            
-        except Exception as e:
+            horizon_decay = {'Weekly': 1.0, 'Monthly': 0.9, 'Quarterly': 0.78}.get(time_frame, 1.0)
+            return round(base_prob * horizon_decay)
+        except Exception:
             return 50
-    
+
+    def _calculate_price_range(self, current_price, total_score, time_frame, probability):
+        """Expected range around current price, wider for longer horizons / lower confidence."""
+        try:
+            base_width = {'Weekly': 0.06, 'Monthly': 0.12, 'Quarterly': 0.20}.get(time_frame, 0.08)
+            confidence_adjust = max(0.6, 1.2 - (probability / 100))
+            directional_bias = abs(total_score) * 0.01
+            width = base_width * confidence_adjust + directional_bias
+            low = current_price * (1 - width)
+            high = current_price * (1 + width)
+            return round(low, 2), round(high, 2)
+        except Exception:
+            return round(current_price * 0.95, 2), round(current_price * 1.05, 2)
+
+
     def _generate_factors(self, outlook, technical_data, sentiment_data, risk_data, market_data):
         """Generate explanatory factors for the outlook"""
         factors = []
@@ -454,8 +470,9 @@ class WeeklyOutlook:
                 direction_color = "🟢" if "Bullish" in outlook['direction'] else "🔴" if "Bearish" in outlook['direction'] else "🟡"
                 st.markdown(f"### {direction_color} {outlook['direction']}")
                 st.markdown(f"**Confidence:** {outlook['confidence']}%")
-                st.markdown(f"**{outlook['time_frame']} Price Target:** ${outlook['price_target']:.2f}")
+                st.markdown(f"**{outlook['time_frame']} Target:** ${outlook['price_target']:.2f}")
                 st.markdown(f"**Probability:** {outlook['probability']}%")
+                st.markdown(f"**Expected Range:** ${outlook['range_low']:.2f} - ${outlook['range_high']:.2f}")
                 
                 # Score breakdown
                 st.write("**Score Breakdown:**")
