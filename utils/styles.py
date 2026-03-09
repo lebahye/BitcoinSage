@@ -5,7 +5,8 @@ Call inject_styles() once in app.py — do not call from individual components.
 """
 
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, time as dtime
+from zoneinfo import ZoneInfo
 
 COLORS = {
     "primary":   "#f7931e",
@@ -83,3 +84,20 @@ def freshness_note(label: str, detail: str = ""):
     if detail:
         text += f" · {detail}"
     st.caption(text)
+
+def market_hours_note(market: str = "options"):
+    """Simple NYSE/Nasdaq market-hours warning for quote-sensitive tabs."""
+    ny = datetime.now(ZoneInfo("America/New_York"))
+    is_weekday = ny.weekday() < 5
+    is_open = is_weekday and dtime(9, 30) <= ny.time() <= dtime(16, 0)
+    ts = ny.strftime('%Y-%m-%d %H:%M %Z')
+    if market == "options":
+        if is_open:
+            st.success(f"🟢 U.S. market is open ({ts}) — options quotes are more likely to be current.")
+        else:
+            st.warning(f"🟡 U.S. market is closed ({ts}) — options quotes may reflect stale last-trade prices. Check bid/ask before trading.")
+    else:
+        if is_open:
+            st.info(f"🟢 U.S. market session active ({ts}).")
+        else:
+            st.info(f"🟡 Outside regular U.S. market hours ({ts}).")
