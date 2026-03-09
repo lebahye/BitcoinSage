@@ -517,7 +517,7 @@ def main():
     with tab_lab:
         sub_bt, sub_out, sub_vol = st.tabs([
             "🔬 Backtesting",
-            "🔮 Market Outlook",
+            "🔮 Forecast Center",
             "🕳️ Volatility Hole",
         ])
 
@@ -530,13 +530,13 @@ def main():
 
         with sub_out:
             if not stock_data_available:
-                _no_data_error("Market Outlook")
+                _no_data_error("Forecast Center")
             else:
                 with st.spinner("Generating market outlook…"):
                     try:
                         get_weekly_outlook().render(selected_stocks, MINING_STOCKS)
                     except Exception as e:
-                        _tab_error("Market Outlook", e)
+                        _tab_error("Forecast Center", e)
 
         with sub_vol:
             if not stock_data_available:
