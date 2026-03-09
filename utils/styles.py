@@ -7,12 +7,10 @@ Call inject_styles() once in app.py — do not call from individual components.
 import streamlit as st
 from datetime import datetime
 
-# ─── Palette ──────────────────────────────────────────────────────────────────
-
 COLORS = {
-    "primary":   "#f7931e",   # Bitcoin orange
-    "secondary": "#ffcc02",   # Gold
-    "accent":    "#00ff88",   # Neon green
+    "primary":   "#f7931e",
+    "secondary": "#ffcc02",
+    "accent":    "#00ff88",
     "danger":    "#ff4444",
     "warning":   "#ffaa00",
     "success":   "#00cc66",
@@ -67,7 +65,6 @@ def loading_placeholder(message: str = "Loading data…"):
     st.markdown(f'<div class="loading-overlay">⏳ {message}</div>', unsafe_allow_html=True)
 
 def data_lineage_panel(items, title: str = "Data Quality"):
-    """Compact panel for Direct / Estimated / Proxy / freshness notes."""
     now = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
     body = "<ul style='margin:0.35rem 0 0 1rem; padding:0;'>"
     for item in items:
@@ -79,3 +76,10 @@ def data_lineage_panel(items, title: str = "Data Quality"):
         f"{body}</div>",
         unsafe_allow_html=True
     )
+
+def freshness_note(label: str, detail: str = ""):
+    now = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
+    text = f"**Freshness:** {label} · rendered {now}"
+    if detail:
+        text += f" · {detail}"
+    st.caption(text)
