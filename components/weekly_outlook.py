@@ -84,6 +84,7 @@ class WeeklyOutlook:
                     'Confidence': f"{x['confidence']}%",
                     'Target': f"${x['price_target']:.2f}",
                     'Range': f"${x['range_low']:.2f} - ${x['range_high']:.2f}",
+                    'Action': x['action_label'],
                     'Score': f"{x['score']:+.1f}",
                 }
                 for x in sorted(outlook_data, key=lambda x: x['score'], reverse=True)
@@ -116,7 +117,9 @@ class WeeklyOutlook:
                 'price_target': 0,
                 'probability': 0,
                 'range_low': 0,
-                'range_high': 0
+                'range_high': 0,
+                'regime_adjustment': 0,
+                'action_label': 'Wait'
             }
             
             # Get stock data for analysis
@@ -152,8 +155,12 @@ class WeeklyOutlook:
             volume_score = self._calculate_volume_score(symbol)
             outlook['volume_score'] = volume_score
             
+            # Regime / reflexivity-style adjustment
+            regime_adjustment = self._calculate_regime_adjustment(prices, market_data)
+            outlook['regime_adjustment'] = regime_adjustment
+
             # Combined Score (Enhanced with all components)
-            total_score = technical_score + options_score + volume_score + sentiment_score + risk_score
+            total_score = technical_score + options_score + volume_score + sentiment_score + risk_score + regime_adjustment
             outlook['score'] = total_score
             
             # Calculate price target and probability
@@ -184,6 +191,8 @@ class WeeklyOutlook:
                 outlook['direction'] = 'Neutral'
                 outlook['confidence'] = 40 + abs(total_score) * 5
             
+            outlook['action_label'] = self._determine_action_label(outlook)
+
             # Generate explanatory factors
             outlook['factors'] = self._generate_factors(outlook, technical_data, sentiment_data, risk_data, market_data)
             
@@ -325,6 +334,55 @@ class WeeklyOutlook:
         except Exception:
             return round(current_price * 0.95, 2), round(current_price * 1.05, 2)
 
+
+
+    def _calculate_regime_adjustment(self, prices, market_data):
+        """Simple regime/reflexivity adjustment based on recent trend + market bias."""
+        try:
+            score = 0
+            recent_20d = (prices.iloc[-1] - prices.iloc[max(0, len(prices)-20)]) / prices.iloc[max(0, len(prices)-20)]
+            if recent_20d > 0.12:
+                score += 0.75
+            elif recent_20d < -0.12:
+                score -= 0.75
+
+            market_bias = market_data.get('market_bias', 'Neutral') if market_data else 'Neutral'
+            if market_bias == 'Bullish':
+                score += 0.5
+            elif market_bias == 'Bearish':
+                score -= 0.5
+
+            fear_greed = market_data.get('fear_greed_score', 50) if market_data else 50
+            if fear_greed < 25:
+                score += 0.25
+            elif fear_greed > 75:
+                score -= 0.25
+
+            return max(-1.5, min(1.5, score))
+        except Exception:
+            return 0
+
+    def _determine_action_label(self, outlook):
+        """Turn forecast into a clear action."""
+        score = outlook.get('score', 0)
+        confidence = outlook.get('confidence', 50)
+        direction = outlook.get('direction', 'Neutral')
+
+        if 'Strong Bearish' in direction and confidence >= 70:
+            return 'Avoid / Hedge'
+        if 'Bearish' in direction and confidence >= 60:
+            return 'Hedge / Reduce'
+        if 'Strong Bullish' in direction and confidence >= 75:
+            return 'Accumulate'
+        if 'Bullish' in direction and confidence >= 60:
+            return 'Accumulate / Hold'
+        if 'Mild Bullish' in direction and confidence >= 50:
+            return 'Hold / Selective Buy'
+        if 'Mild Bearish' in direction and confidence >= 50:
+            return 'Reduce / Wait'
+        if abs(score) < 0.75:
+            return 'Wait / No Edge'
+        return 'Speculative Only'
 
     def _generate_factors(self, outlook, technical_data, sentiment_data, risk_data, market_data):
         """Generate explanatory factors for the outlook"""
@@ -473,6 +531,7 @@ class WeeklyOutlook:
                 st.markdown(f"**{outlook['time_frame']} Target:** ${outlook['price_target']:.2f}")
                 st.markdown(f"**Probability:** {outlook['probability']}%")
                 st.markdown(f"**Expected Range:** ${outlook['range_low']:.2f} - ${outlook['range_high']:.2f}")
+                st.markdown(f"**Action Label:** {outlook['action_label']}")
                 
                 # Score breakdown
                 st.write("**Score Breakdown:**")
