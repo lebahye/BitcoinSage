@@ -199,6 +199,120 @@ def _render_command_center(selected_stocks, stock_data, stock_data_available, da
         st.caption("Use this strip as your quick read before diving into tabs.")
 
 
+def _render_decision_summary(selected_stocks, stock_data, stock_data_available, data_fetcher, options_analyzer):
+    """Consensus layer: regime, best long, biggest risk, best options setup, action bias."""
+    st.subheader("🧠 Decision Summary")
+
+    if not stock_data_available or stock_data.empty:
+        st.info("Decision Summary is limited because core price data is unavailable.")
+        return
+
+    # 1) Regime
+    btc_change = None
+    try:
+        sentiment = data_fetcher.get_market_sentiment()
+        btc_change = sentiment.get('btc_change')
+    except Exception:
+        pass
+
+    sector_change = 0.0
+    try:
+        if len(stock_data) > 1:
+            latest = stock_data.iloc[-1].mean()
+            prev = stock_data.iloc[-2].mean()
+            sector_change = ((latest - prev) / prev) * 100 if prev else 0
+    except Exception:
+        pass
+
+    if btc_change is None:
+        regime = "Mixed / Unknown"
+    elif btc_change > 2 and sector_change > 2:
+        regime = "Bullish Expansion"
+    elif btc_change < -2 and sector_change < -2:
+        regime = "Bearish Contraction"
+    elif btc_change > 0 and sector_change < 0:
+        regime = "Divergence"
+    else:
+        regime = "Neutral / Mixed"
+
+    # 2) Best long candidate from NextMover
+    best_long = "N/A"
+    best_long_reason = ""
+    try:
+        from utils.next_mover_engine import NextMoverEngine
+        nm = NextMoverEngine()
+        rankings = nm.calculate_composite_score()
+        if not rankings.empty:
+            filtered = rankings[rankings['Symbol'].isin(selected_stocks)]
+            if not filtered.empty:
+                row = filtered.iloc[0]
+                best_long = row['Symbol']
+                best_long_reason = row['Key Signals'][:120]
+    except Exception:
+        pass
+
+    # 3) Biggest risk candidate from risk scores
+    biggest_risk = "N/A"
+    biggest_risk_reason = ""
+    try:
+        from components.risk_center import RiskCenter
+        rc = RiskCenter()
+        rdata = rc.get_risk_data(selected_stocks)
+        ranked = []
+        for sym in selected_stocks:
+            if sym in rdata:
+                ranked.append((sym, rdata[sym].get('risk_score', 0), rdata[sym].get('volatility', 0)))
+        if ranked:
+            ranked.sort(key=lambda x: x[1], reverse=True)
+            sym, score, vol = ranked[0]
+            biggest_risk = sym
+            biggest_risk_reason = f"risk score {score:.1f}, volatility {vol:.1f}%"
+    except Exception:
+        pass
+
+    # 4) Best options setup by total options volume
+    best_options = "N/A"
+    best_options_reason = ""
+    try:
+        best_vol = -1
+        for sym in selected_stocks:
+            calls, puts = data_fetcher.get_options_data(sym)
+            if calls is None or puts is None:
+                continue
+            pc = options_analyzer.analyze_put_call_ratio(calls, puts)
+            total_vol = pc.get('total_volume', 0)
+            if total_vol > best_vol:
+                best_vol = total_vol
+                best_options = sym
+                best_options_reason = f"total options volume {int(total_vol):,}, P/C {pc.get('put_call_ratio', 0):.2f}"
+    except Exception:
+        pass
+
+    # 5) Suggested action
+    if regime == "Bullish Expansion" and best_long != "N/A":
+        action = f"Lean long on {best_long}; use options selectively if liquidity is good."
+    elif regime == "Bearish Contraction":
+        action = f"Prioritize protection; watch {biggest_risk} closely and avoid forcing entries."
+    elif regime == "Divergence":
+        action = f"Stay selective. Prefer leaders with confirmation and avoid crowded laggard bets."
+    else:
+        action = "Reduce conviction. Let Risk / Reflexivity / Options confirm before acting."
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Regime", regime)
+    c2.metric("Best Long", best_long)
+    c3.metric("Biggest Risk", biggest_risk)
+    c4.metric("Best Options Setup", best_options)
+    c5.metric("Action Bias", "Actionable" if "Lean" in action or "Prioritize" in action else "Wait / Selective")
+
+    st.markdown(
+        f"**Best Long — {best_long}:** {best_long_reason or 'Insufficient signal detail'}  \n"
+        f"**Biggest Risk — {biggest_risk}:** {biggest_risk_reason or 'Insufficient risk detail'}  \n"
+        f"**Best Options Setup — {best_options}:** {best_options_reason or 'Insufficient options data'}  \n"
+        f"**Suggested Action:** {action}"
+    )
+
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main():
