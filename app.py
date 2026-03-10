@@ -235,22 +235,26 @@ def _render_decision_summary(selected_stocks, stock_data, stock_data_available, 
     else:
         regime = "Neutral / Mixed"
 
-    # 2) Best long candidate from NextMover
+    # 2) Canonical best idea from Forecast Center
     best_long = "N/A"
     best_long_reason = ""
+    best_long_action = ""
     try:
-        from utils.next_mover_engine import NextMoverEngine
-        nm = NextMoverEngine()
-        rankings = nm.calculate_composite_score()
-        if not rankings.empty:
-            filtered = rankings[rankings['Symbol'].isin(selected_stocks)]
-            if not filtered.empty:
-                row = filtered.iloc[0]
-                best_long = row['Symbol']
-                best_long_reason = row['Key Signals'][:120]
+        from components.weekly_outlook import WeeklyOutlook
+        fc = WeeklyOutlook()
+        forecasts = fc.get_forecast_data(selected_stocks, MINING_STOCKS, 'Weekly')
+        if forecasts:
+            forecasts = sorted(forecasts, key=lambda x: x.get('score', 0), reverse=True)
+            row = forecasts[0]
+            best_long = row.get('symbol', 'N/A')
+            best_long_action = row.get('action_label', '')
+            best_long_reason = (
+                f"{row.get('direction', 'N/A')} · {row.get('confidence', 0)}% confidence · "
+                f"target ${row.get('price_target', 0):.2f} · "
+                f"range ${row.get('range_low', 0):.2f}-${row.get('range_high', 0):.2f}"
+            )
     except Exception:
         pass
-
     # 3) Biggest risk candidate from risk scores
     biggest_risk = "N/A"
     biggest_risk_reason = ""
@@ -289,8 +293,8 @@ def _render_decision_summary(selected_stocks, stock_data, stock_data_available, 
         pass
 
     # 5) Suggested action
-    if regime == "Bullish Expansion" and best_long != "N/A":
-        action = f"Lean long on {best_long}; use options selectively if liquidity is good."
+    if best_long_action in ["Accumulate", "Accumulate / Hold", "Hold / Selective Buy"] and best_long != "N/A":
+        action = f"Forecast Center favors {best_long} ({best_long_action}). Use options selectively if liquidity is good."
     elif regime == "Bearish Contraction":
         action = f"Prioritize protection; watch {biggest_risk} closely and avoid forcing entries."
     elif regime == "Divergence":
@@ -300,13 +304,13 @@ def _render_decision_summary(selected_stocks, stock_data, stock_data_available, 
 
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Regime", regime)
-    c2.metric("Best Long", best_long)
+    c2.metric("Best Forecast", best_long)
     c3.metric("Biggest Risk", biggest_risk)
     c4.metric("Best Options Setup", best_options)
     c5.metric("Action Bias", "Actionable" if "Lean" in action or "Prioritize" in action else "Wait / Selective")
 
     st.markdown(
-        f"**Best Long — {best_long}:** {best_long_reason or 'Insufficient signal detail'}  \n"
+        f"**Best Forecast — {best_long}:** {(best_long_reason or 'Insufficient signal detail')} {('· ' + best_long_action) if best_long_action else ''}  \n"
         f"**Biggest Risk — {biggest_risk}:** {biggest_risk_reason or 'Insufficient risk detail'}  \n"
         f"**Best Options Setup — {best_options}:** {best_options_reason or 'Insufficient options data'}  \n"
         f"**Suggested Action:** {action}"
