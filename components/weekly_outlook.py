@@ -21,6 +21,27 @@ class WeeklyOutlook:
     
     def render(self, selected_stocks, stock_names):
         """Render forecast center dashboard"""
+
+    def get_forecast_data(self, selected_stocks, stock_names, time_frame='Weekly'):
+        """Public forecast API for app-level consensus / decision summary."""
+        technical_data = self.enhanced_technical.get_technical_data(selected_stocks)
+        sentiment_data = self.sentiment_analysis.get_sentiment_data(selected_stocks)
+        risk_data = self.risk_management.get_risk_data(selected_stocks)
+
+        outlook_data = []
+        for symbol in selected_stocks:
+            outlook = self._analyze_stock_outlook(
+                symbol,
+                stock_names.get(symbol, symbol),
+                time_frame,
+                technical_data.get(symbol, {}),
+                sentiment_data.get(symbol, {}),
+                risk_data.get(symbol, {}),
+                sentiment_data.get('market', {})
+            )
+            if outlook:
+                outlook_data.append(outlook)
+        return outlook_data
         
         # Time period selector
         col1, col2 = st.columns([3, 1])
@@ -51,26 +72,7 @@ class WeeklyOutlook:
             Use this analysis as one factor among many in your trading decisions.
             """)
         
-        # Get integrated data from all components
-        technical_data = self.enhanced_technical.get_technical_data(selected_stocks)
-        sentiment_data = self.sentiment_analysis.get_sentiment_data(selected_stocks)
-        risk_data = self.risk_management.get_risk_data(selected_stocks)
-        
-        # Generate outlook for each stock
-        outlook_data = []
-        
-        for symbol in selected_stocks:
-            outlook = self._analyze_stock_outlook(
-                symbol, 
-                stock_names.get(symbol, symbol),
-                time_frame,
-                technical_data.get(symbol, {}),
-                sentiment_data.get(symbol, {}),
-                risk_data.get(symbol, {}),
-                sentiment_data.get('market', {})
-            )
-            if outlook:
-                outlook_data.append(outlook)
+        outlook_data = self.get_forecast_data(selected_stocks, stock_names, time_frame)
         
         if outlook_data:
             # Summary overview
