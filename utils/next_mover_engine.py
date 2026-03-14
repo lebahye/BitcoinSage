@@ -326,7 +326,9 @@ class NextMoverEngine:
         try:
             price_data = self.data_fetcher.get_stock_data([top_pick['Symbol']], period='1D')
             current_price = price_data[top_pick['Symbol']].iloc[-1] if not price_data.empty else None
-        except:
+        except Exception as _exc:
+            import logging
+            logging.warning("Price fetch error for top pick: %s", _exc)
             current_price = None
         
         return {

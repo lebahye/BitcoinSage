@@ -695,8 +695,10 @@ class AdvancedTADashboard:
             rs = gain / loss
             rsi = 100 - (100 / (1 + rs))
             return rsi.iloc[-1] if not pd.isna(rsi.iloc[-1]) else 50.0
-        except:
-            return 50.0
+        except Exception as _exc:
+            import logging
+            logging.warning("TA calculation failed (returning NaN): %s", _exc)
+            return float('nan')
     
     def _calculate_macd_signal(self, prices):
         """Calculate MACD signal"""
@@ -714,8 +716,10 @@ class AdvancedTADashboard:
                 return "Bullish"
             else:
                 return "Bearish"
-        except:
-            return "Neutral"
+        except Exception as _exc:
+            import logging
+            logging.warning("TA signal calculation failed: %s", _exc)
+            return None
     
     def _calculate_bollinger_signal(self, prices, window=20):
         """Calculate Bollinger Bands signal"""
@@ -735,8 +739,10 @@ class AdvancedTADashboard:
                 return "Above Middle"
             else:
                 return "Below Middle"
-        except:
-            return "Neutral"
+        except Exception as _exc:
+            import logging
+            logging.warning("TA signal calculation failed: %s", _exc)
+            return None
     
     def _calculate_stochastic(self, hist, k_window=14, d_window=3):
         """Calculate Stochastic oscillator"""
@@ -745,8 +751,10 @@ class AdvancedTADashboard:
             high_max = hist['High'].rolling(window=k_window).max()
             k_percent = 100 * ((hist['Close'] - low_min) / (high_max - low_min))
             return k_percent.iloc[-1] if not pd.isna(k_percent.iloc[-1]) else 50.0
-        except:
-            return 50.0
+        except Exception as _exc:
+            import logging
+            logging.warning("TA calculation failed (returning NaN): %s", _exc)
+            return float('nan')
     
     def _find_support_levels(self, hist):
         """Find support levels using pivot lows"""
@@ -766,7 +774,9 @@ class AdvancedTADashboard:
             support_levels = [level for level in support_levels if level < current_price * 0.95]
             
             return sorted(support_levels, reverse=True)[:5]  # Top 5 closest supports
-        except:
+        except Exception as _exc:
+            import logging
+            logging.warning("TA level calculation error: %s", _exc)
             return []
     
     def _find_resistance_levels(self, hist):
@@ -787,7 +797,9 @@ class AdvancedTADashboard:
             resistance_levels = [level for level in resistance_levels if level > current_price * 1.05]
             
             return sorted(resistance_levels)[:5]  # Top 5 closest resistances
-        except:
+        except Exception as _exc:
+            import logging
+            logging.warning("TA level calculation error: %s", _exc)
             return []
     
     def _calculate_fibonacci_levels(self, hist):
@@ -809,7 +821,9 @@ class AdvancedTADashboard:
                 '78.6': high - (diff * 0.786),
                 '100.0': low
             }
-        except:
+        except Exception as _exc:
+            import logging
+            logging.warning("TA calculation error: %s", _exc)
             return {}
     
     def _detect_patterns(self, hist):
@@ -847,7 +861,9 @@ class AdvancedTADashboard:
                 })
             
             return patterns
-        except:
+        except Exception as _exc:
+            import logging
+            logging.warning("TA level calculation error: %s", _exc)
             return []
     
     def _analyze_volume_patterns(self, hist):
@@ -901,7 +917,9 @@ class AdvancedTADashboard:
                 'correlation': pv_correlation,
                 'accumulation': accumulation
             }
-        except:
+        except Exception as _exc:
+            import logging
+            logging.warning("TA calculation error: %s", _exc)
             return {}
     
     def _determine_trend_signal(self, indicators):
@@ -962,7 +980,9 @@ class AdvancedTADashboard:
                 return "Moderate"
             else:
                 return "Low"
-        except:
+        except Exception as _exc:
+            import logging
+            logging.warning("TA volatility signal error: %s", _exc)
             return "Normal"
     
     def _calculate_technical_score(self, indicators):
@@ -1020,7 +1040,9 @@ class AdvancedTADashboard:
                 return "Moderate"
             else:
                 return "Weak"
-        except:
+        except Exception as _exc:
+            import logging
+            logging.warning("TA strength signal error: %s", _exc)
             return "Unknown"
     
     def _create_macd_chart(self, symbol, hist):
@@ -1051,7 +1073,9 @@ class AdvancedTADashboard:
                             margin=dict(l=0, r=0, t=40, b=0))
             
             return fig
-        except:
+        except Exception as _exc:
+            import logging
+            logging.warning("TA chart error: %s", _exc)
             return None
     
     def _create_oscillators_chart(self, symbol, hist):
@@ -1092,7 +1116,9 @@ class AdvancedTADashboard:
                             margin=dict(l=0, r=0, t=40, b=0))
             
             return fig
-        except:
+        except Exception as _exc:
+            import logging
+            logging.warning("TA chart error: %s", _exc)
             return None
     
     def _create_levels_chart(self, symbol, hist, indicators):
@@ -1138,7 +1164,9 @@ class AdvancedTADashboard:
             fig.update_xaxes(rangeslider_visible=False)
             
             return fig
-        except:
+        except Exception as _exc:
+            import logging
+            logging.warning("TA chart error: %s", _exc)
             return None
 
     def get_technical_data(self, selected_stocks):
@@ -1157,15 +1185,17 @@ class AdvancedTADashboard:
                     'resistance_level': indicators.get('resistance_level', 0),
                     'volatility_signal': indicators.get('volatility_signal', 'Normal')
                 }
-            except:
+            except Exception as _exc:
+                import logging
+                logging.warning("TA data fetch error for %s: %s", symbol, _exc)
                 technical_data[symbol] = {
-                    'trend_signal': 'Neutral',
-                    'momentum_signal': 'Mixed', 
-                    'technical_score': 0,
-                    'rsi': 50,
-                    'support_level': 0,
-                    'resistance_level': 0,
-                    'volatility_signal': 'Normal'
+                    'trend_signal': None,
+                    'momentum_signal': None,
+                    'technical_score': None,
+                    'rsi': None,
+                    'support_level': None,
+                    'resistance_level': None,
+                    'volatility_signal': None
                 }
         
         return technical_data

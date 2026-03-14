@@ -101,8 +101,9 @@ class ChartBuilder:
                             ),
                             row=2, col=1
                         )
-                except:
-                    pass  # Skip volume if not available
+                except Exception as _exc:
+                    import logging
+                    logging.debug("Volume chart skipped: %s", _exc)
             
             # Update layout
             fig.update_layout(
