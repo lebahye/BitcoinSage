@@ -32,7 +32,7 @@ from components.reflexivity_dashboard import ReflexivityDashboard
 # ─── Page config (must be first Streamlit call) ──────────────────────────────
 
 st.set_page_config(
-    page_title="BitcoinSage",
+    page_title="BitcoinSage - Advanced Bitcoin Analytics",
     page_icon="₿",
     layout="wide",
     initial_sidebar_state="expanded"
