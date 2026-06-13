@@ -55,7 +55,9 @@ class OptionsAnalytics:
                                 'date': date_point,
                                 'iv': float(avg_iv)
                             })
-                except:
+                except Exception as _exc:
+                    import logging
+                    logging.warning("Options chain iteration error: %s", _exc)
                     continue
             
             if len(iv_history) < 10:
@@ -138,7 +140,7 @@ class OptionsAnalytics:
                             strike = option['strike']
                             premium = option.get('lastPrice', option.get('bid', 0))
                             iv = option.get('impliedVolatility', 0)
-                            delta = option.get('delta', self._estimate_delta('call', current_price, strike, days_to_exp, iv))
+                            delta = option.get('delta') or self._safe_estimate_delta('call', current_price, strike, days_to_exp, iv)
                             
                             if premium > 0:
                                 annual_return = (premium / current_price) * (365 / days_to_exp) * 100
@@ -163,7 +165,7 @@ class OptionsAnalytics:
                             strike = option['strike']
                             premium = option.get('lastPrice', option.get('ask', 0))
                             iv = option.get('impliedVolatility', 0)
-                            delta = option.get('delta', self._estimate_delta('put', current_price, strike, days_to_exp, iv))
+                            delta = option.get('delta') or self._safe_estimate_delta('put', current_price, strike, days_to_exp, iv)
                             
                             if premium > 0:
                                 cost_pct = (premium / current_price) * 100
@@ -192,7 +194,7 @@ class OptionsAnalytics:
                             strike = option['strike']
                             premium = option.get('lastPrice', option.get('ask', 0))
                             iv = option.get('impliedVolatility', 0)
-                            delta = option.get('delta', self._estimate_delta('call', current_price, strike, days_to_exp, iv))
+                            delta = option.get('delta') or self._safe_estimate_delta('call', current_price, strike, days_to_exp, iv)
                             gamma = option.get('gamma', 0)
                             theta = option.get('theta', 0)
                             
@@ -241,27 +243,58 @@ class OptionsAnalytics:
             st.error(f"Error scanning options chain for {symbol}: {str(e)}")
             return {}
     
-    def _estimate_delta(self, option_type, spot, strike, days_to_exp, iv):
-        """Estimate delta using Black-Scholes approximation"""
+    def _estimate_delta(self, option_type, spot, strike, days_to_exp, iv,
+                        risk_free_rate: float = 0.05):
+        """Estimate delta using Black-Scholes approximation.
+
+        Args:
+            risk_free_rate: annualised risk-free rate (default 5 %; override via
+                            st.secrets or environment variable RISK_FREE_RATE).
+        """
+        import os, logging
         try:
-            if days_to_exp <= 0 or iv <= 0:
-                return 0.5 if option_type == 'call' else -0.5
-            
+            r = float(os.environ.get("RISK_FREE_RATE", risk_free_rate))
+        except (ValueError, TypeError):
+            r = risk_free_rate
+
+        if days_to_exp <= 0 or iv <= 0 or spot <= 0 or strike <= 0:
+            raise ValueError(
+                f"_estimate_delta: invalid inputs — spot={spot}, strike={strike}, "
+                f"days_to_exp={days_to_exp}, iv={iv}"
+            )
+
+        try:
             T = days_to_exp / 365.0
-            r = 0.05
-            
             d1 = (np.log(spot / strike) + (r + 0.5 * iv**2) * T) / (iv * np.sqrt(T))
-            
+
             if option_type == 'call':
                 delta = norm.cdf(d1)
             else:
                 delta = norm.cdf(d1) - 1
-            
+
             return float(delta)
-            
-        except:
-            return 0.5 if option_type == 'call' else -0.5
+
+        except Exception as exc:
+            logging.warning("_estimate_delta Black-Scholes error: %s", exc)
+            raise
     
+    def _safe_estimate_delta(self, option_type, spot, strike, days_to_exp, iv):
+        """Wrapper for _estimate_delta that logs and returns None on failure.
+
+        Callers should handle None explicitly rather than silently using a
+        hardcoded fallback that would produce misleading analytics.
+        """
+        import logging
+        try:
+            return self._estimate_delta(option_type, spot, strike, days_to_exp, iv)
+        except Exception as exc:
+            logging.warning(
+                "Could not estimate delta for %s option (spot=%.2f, strike=%.2f, "
+                "dte=%s, iv=%.4f): %s",
+                option_type, spot, strike, days_to_exp, iv, exc,
+            )
+            return None
+
     def calculate_greeks_surface(self, symbol):
         """
         Calculate Greeks surface across all strikes and expirations
@@ -313,7 +346,9 @@ class OptionsAnalytics:
                             'iv': put.get('impliedVolatility', 0)
                         })
                 
-                except:
+                except Exception as _exc:
+                    import logging
+                    logging.warning("Options chain iteration error: %s", _exc)
                     continue
             
             df = pd.DataFrame(greeks_data)
@@ -385,7 +420,9 @@ class OptionsAnalytics:
                             'put_iv': float(put_iv)
                         })
                 
-                except:
+                except Exception as _exc:
+                    import logging
+                    logging.warning("Options chain iteration error: %s", _exc)
                     continue
             
             if len(term_structure) < 2:

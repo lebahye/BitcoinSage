@@ -57,8 +57,10 @@ class PersonalPortfolio:
                     current_data[symbol] = current_price
                     position_value = current_price * self.positions[symbol]['shares']
                     total_value += position_value
-            except:
-                current_data[symbol] = 0
+            except Exception as _exc:
+                import logging
+                logging.warning("Price fetch failed for %s: %s", symbol, _exc)
+                current_data[symbol] = None
         
         # Portfolio summary metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -249,9 +251,16 @@ class PersonalPortfolio:
         with col2:
             st.metric("Annual Income Potential", f"${total_annual:,}")
         with col3:
-            # Estimate portfolio value for return calculation
-            estimated_portfolio_value = 500000  # Rough estimate - will calculate precisely later
-            annual_return = (total_annual / estimated_portfolio_value * 100) if estimated_portfolio_value > 0 else 0
+            # Compute actual portfolio value from live prices
+            live_portfolio_value = 0.0
+            for sym, pos in self.positions.items():
+                try:
+                    stock_data = data_fetcher.get_stock_data([sym], period='1D')
+                    if not stock_data.empty and sym in stock_data.columns:
+                        live_portfolio_value += stock_data[sym].iloc[-1] * pos['shares']
+                except Exception:
+                    pass  # Partial value if some tickers fail; logged by data_fetcher
+            annual_return = (total_annual / live_portfolio_value * 100) if live_portfolio_value > 0 else 0
             st.metric("Estimated Annual Return", f"{annual_return:.1f}%")
         with col4:
             total_contracts = sum(pos['shares']//100 for pos in self.positions.values())
