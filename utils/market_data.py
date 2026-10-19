@@ -113,13 +113,12 @@ def align_frame(closes: pd.DataFrame, calendar_col: Optional[str] = None,
     return pd.DataFrame(out, index=calendar)
 
 
-@_cache
-def fetch_daily_closes(tickers: tuple, period: str = "1y") -> pd.DataFrame:
-    """Download daily closes (auto-adjusted) for tickers; tz-naive date index.
+class _FetchIncomplete(Exception):
+    """Raised inside the cached function so a failed/rate-limited download is NOT cached."""
 
-    Returns the raw per-ticker series joined on the union of dates (no fill);
-    use `align_frame` before computing cross-asset statistics.
-    """
+
+@_cache
+def _fetch_daily_closes_cached(tickers: tuple, period: str) -> pd.DataFrame:
     import yfinance as yf
     out = {}
     for t in tickers:
@@ -129,9 +128,26 @@ def fetch_daily_closes(tickers: tuple, period: str = "1y") -> pd.DataFrame:
                 out[t] = to_daily(h["Close"])
         except Exception:
             continue
-    if not out:
-        return pd.DataFrame()
+    # If most tickers failed (typically a Yahoo rate limit), don't cache the hole.
+    if not out or len(out) < max(1, len(tickers) // 2):
+        raise _FetchIncomplete(f"only {len(out)}/{len(tickers)} tickers downloaded")
     return pd.DataFrame(out).sort_index()
+
+
+def fetch_daily_closes(tickers: tuple, period: str = "1y") -> pd.DataFrame:
+    """Daily closes (auto-adjusted) for tickers on a tz-naive date index.
+
+    Returns the raw per-ticker series joined on the union of dates (no fill);
+    use `align_frame` before computing cross-asset statistics.  Successful
+    downloads are cached for 15 minutes; failures return an empty frame and
+    are retried on the next run instead of being cached.
+    """
+    try:
+        return _fetch_daily_closes_cached(tuple(tickers), period)
+    except _FetchIncomplete:
+        return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
 
 
 def fetched_at() -> str:

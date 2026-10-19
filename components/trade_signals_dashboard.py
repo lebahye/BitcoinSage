@@ -151,7 +151,7 @@ class TradeSignalsDashboard:
 In strong downtrends (50-MA falling > 2.5% in 10 days), BUY threshold rises to 40.
 
 **Stops:** 2× ATR below entry (not a flat percentage).  
-**Targets:** Fibonacci 127.2% and 161.8% extensions from 60-day swing.
+**Targets:** the next two Fibonacci levels above entry from the 60-day swing (retracements below the high, 127.2%/161.8% extensions above it).
 
 **Data:** Yahoo Finance daily bars, refreshed every 5 minutes.  
 ⚠️ Signals are analytical tools, not financial advice. Verify before trading.
@@ -442,13 +442,13 @@ In strong downtrends (50-MA falling > 2.5% in 10 days), BUY threshold rises to 4
                               f"{delta_entry:+.1f}% from now")
                 with t2:
                     st.metric(
-                        f"🛑 Stop (2× ATR={pt.get('atr', 0):.2f})",
+                        f"🛑 Stop (ATR {pt.get('atr', 0):.2f})",
                         f"${pt['stop_loss']:.2f}",
                         f"−{pt['risk_pct']:.1f}% risk",
                         delta_color="inverse",
                     )
                 with t3:
-                    st.metric("🎯 Target 1 (127.2%)",
+                    st.metric(f"🎯 Target 1 ({pt.get('tp1_label', 'Fib')})",
                               f"${pt['take_profit_1']:.2f}",
                               f"+{pt['reward_pct_tp1']:.1f}%")
                 with t4:
@@ -458,7 +458,7 @@ In strong downtrends (50-MA falling > 2.5% in 10 days), BUY threshold rises to 4
 
                 t5, _, _ = st.columns(3)
                 with t5:
-                    st.metric("🎯 Target 2 (161.8%)",
+                    st.metric(f"🎯 Target 2 ({pt.get('tp2_label', 'Fib')})",
                               f"${pt['take_profit_2']:.2f}",
                               f"+{pt['reward_pct_tp2']:.1f}%")
 

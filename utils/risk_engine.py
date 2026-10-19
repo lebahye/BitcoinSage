@@ -49,8 +49,9 @@ class RiskEngine:
             best_day_dollar = best_day * portfolio_value
             
             return {
-                'var_pct': float(var * 100),
-                'cvar_pct': float(cvar * 100),
+                # scale % to the chosen horizon too (previously only $ was scaled)
+                'var_pct': float(var * 100 * np.sqrt(time_horizon_days)),
+                'cvar_pct': float(cvar * 100 * np.sqrt(time_horizon_days)),
                 'var_dollar': float(var_dollar),
                 'cvar_dollar': float(cvar_dollar),
                 'parametric_var_pct': float(parametric_var * 100),

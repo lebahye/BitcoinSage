@@ -111,57 +111,47 @@ class StockDashboard:
                 st.metric("Mining Sector Avg", "N/A", "N/A")
     
     def _render_performance_grid(self, stock_data, selected_stocks, stock_names):
-        """Render stock performance grid"""
+        """Performance table from DAILY closes.
+
+        The old version used the chart data, which is hourly for the default 1M
+        range, so 'Daily %' was really the last hour, 'Week %' the last 5 hours
+        and volatility was annualised from hourly returns.
+        """
+        from utils.market_data import fetch_daily_closes
+        from utils.explain import HELP
         st.subheader("💰 Stock Performance")
-        
-        if stock_data.empty:
-            st.warning("No stock data available for performance analysis.")
+        daily = fetch_daily_closes(tuple(selected_stocks), "1y")
+        if daily.empty:
+            st.warning("No daily price history available for the performance table.")
             return
-        
-        # Calculate metrics for each stock
-        performance_data = []
-        
+
+        def chg(p, n):
+            return (p.iloc[-1] / p.iloc[-1 - n] - 1) * 100 if len(p) > n else None
+
+        rows = []
         for symbol in selected_stocks:
-            if symbol in stock_data.columns:
-                try:
-                    prices = stock_data[symbol].dropna()
-                    
-                    if len(prices) >= 2:
-                        current_price = prices.iloc[-1]
-                        prev_price = prices.iloc[-2]
-                        daily_change = ((current_price - prev_price) / prev_price) * 100
-                        
-                        # Calculate additional metrics
-                        week_change = ((current_price - prices.iloc[-5]) / prices.iloc[-5] * 100) if len(prices) >= 5 else 0
-                        month_change = ((current_price - prices.iloc[0]) / prices.iloc[0] * 100) if len(prices) > 0 else 0
-                        
-                        # Volatility (standard deviation of returns)
-                        returns = prices.pct_change().dropna()
-                        volatility = returns.std() * np.sqrt(252) * 100  # Annualized
-                        
-                        performance_data.append({
-                            'Symbol': symbol,
-                            'Company': stock_names.get(symbol, symbol),
-                            'Price': f"${current_price:.2f}",
-                            'Daily %': f"{daily_change:+.2f}%",
-                            'Week %': f"{week_change:+.2f}%",
-                            'Month %': f"{month_change:+.2f}%",
-                            'Volatility': f"{volatility:.1f}%"
-                        })
-                    
-                except Exception as e:
-                    st.error(f"Error calculating metrics for {symbol}: {str(e)}")
-        
-        if performance_data:
-            df = pd.DataFrame(performance_data)
-            st.dataframe(
-                df,
-                use_container_width=True,
-                hide_index=True
-            )
+            if symbol not in daily.columns:
+                continue
+            p = daily[symbol].dropna()
+            if len(p) < 2:
+                continue
+            vol = p.pct_change(fill_method=None).iloc[-63:].std() * np.sqrt(252) * 100
+            dd = (p.iloc[-1] / p.max() - 1) * 100
+            fmt = lambda v: "n/a" if v is None else f"{v:+.1f}%"
+            rows.append({
+                'Symbol': symbol, 'Company': stock_names.get(symbol, symbol),
+                'Last close': f"${p.iloc[-1]:.2f}",
+                '1 day': fmt(chg(p, 1)), '1 week': fmt(chg(p, 5)), '1 month': fmt(chg(p, 21)),
+                '3 months': fmt(chg(p, 63)), '1 year': fmt(chg(p, len(p) - 1)) if len(p) > 200 else "n/a",
+                'From 1y high': f"{dd:+.0f}%", 'Volatility (3M, yearly)': f"{vol:.0f}%",
+            })
+        if rows:
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            st.caption(f"Daily closes from Yahoo Finance through {daily.index[-1].date()}. "
+                       "'From 1y high' = drawdown. " + HELP["volatility"])
         else:
             st.warning("No performance data available.")
-    
+
     def _render_price_charts(self, stock_data, selected_stocks, chart_builder):
         """Render interactive price charts"""
         

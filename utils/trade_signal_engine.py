@@ -246,23 +246,33 @@ class TradeSignalEngine:
         # Stop: 2× ATR below entry, floored at 20-day low
         low_20 = float(hist['Low'].tail(20).min())
         stop_atr = cur - 2.0 * atr
-        stop_loss = max(stop_atr, low_20)
-        # Clamp stop to no more than 15% away (don't let massive ATR make stop useless)
-        stop_loss = max(stop_loss, cur * 0.85)
-
         # Entry: current price or 5-day support
         support = float(hist['Low'].tail(5).mean())
         entry = min(cur, support * 1.005)
 
-        # Fibonacci extension targets from 60-day swing
+        stop_loss = max(stop_atr, low_20)
+        # Stop must be at least 1 ATR below entry (a stop sitting right under the
+        # price produced absurd risk/reward like 121:1 after sell-offs)...
+        stop_loss = min(stop_loss, entry - atr)
+        # ...and no more than 15% away (don't let massive ATR make stop useless)
+        stop_loss = max(stop_loss, cur * 0.85)
+
+        # Targets: next Fibonacci levels ABOVE entry from the 60-day swing.
+        # Below the swing high these are retracements (e.g. 38.2%/61.8% of the
+        # drop); at/above it they are 127.2%/161.8% extensions.  Previously the
+        # extensions were used even after a 40% fall, i.e. targets above the high.
         swing_lo = float(hist['Low'].tail(60).min())
         swing_hi = float(hist['High'].tail(60).max())
         diff = swing_hi - swing_lo
-        tp1 = swing_hi + diff * 0.272
-        tp2 = swing_hi + diff * 0.618
-        if cur >= swing_hi:
-            tp1 = cur + 3.0 * atr
-            tp2 = cur + 5.0 * atr
+        fibs = [(f"{int(f*1000)/10:g}% retracement", swing_lo + diff * f) for f in (0.236, 0.382, 0.5, 0.618, 0.786)]
+        fibs += [("swing high", swing_hi), ("127.2% extension", swing_hi + diff * 0.272),
+                 ("161.8% extension", swing_hi + diff * 0.618)]
+        above = [(n, lv) for n, lv in fibs if lv > entry + 0.5 * atr]
+        if len(above) >= 2:
+            (tp1_name, tp1), (tp2_name, tp2) = above[0], above[1]
+        else:
+            tp1_name, tp1 = "entry + 3 ATR", cur + 3.0 * atr
+            tp2_name, tp2 = "entry + 5 ATR", cur + 5.0 * atr
 
         risk = max(entry - stop_loss, 0.01)
         rr = (tp1 - entry) / risk
@@ -277,6 +287,8 @@ class TradeSignalEngine:
             'reward_pct_tp1': round((tp1 - entry) / entry * 100, 1),
             'reward_pct_tp2': round((tp2 - entry) / entry * 100, 1),
             'risk_reward': round(rr, 1),
+            'tp1_label': tp1_name,
+            'tp2_label': tp2_name,
         }
 
     # ──────────────────────────────────────────────────────────────────────────

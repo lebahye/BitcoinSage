@@ -286,8 +286,11 @@ Hover over the small ⓘ next to any number, or open an "ℹ️ What is this?" b
 Nothing here is financial advice.
 """)
 
-    # ── Tabs: long-term holder tabs first, short-term trading tools after ────
-    tabs = st.tabs([
+    # ── Sections: long-term holder views first, short-term trading tools after ─
+    # Only the selected section runs.  (With st.tabs every tab executed on every
+    # rerun — hundreds of Yahoo Finance calls per click, which triggers Yahoo's
+    # rate limit and made the app slow.)
+    SECTIONS = [
         "🧭 My Plan",
         "🏆 Portfolio",
         "🔗 RIOT Correlation Map",
@@ -303,21 +306,25 @@ Nothing here is financial advice.
         "📰 Sentiment & News",
         "📡 Live Polymarket",
         "📖 Research",
-    ])
+    ]
+    view = st.radio("Section", SECTIONS, horizontal=True, key="main_view",
+                    label_visibility="collapsed",
+                    help="First six = long-term holder views. The rest are short-term trading tools.")
+    st.divider()
 
     (tab_plan, tab_portfolio, tab_corr, tab_market, tab_risk, tab_reflex, tab_lab,
      tab_signals, tab_ai, tab_options, tab_flow, tab_ta,
-     tab_sentiment, tab_poly, tab_research) = tabs
+     tab_sentiment, tab_poly, tab_research) = [view == name for name in SECTIONS]
 
     # ── My Plan: the single source of truth for Hold / Trim / Sell / Rotate ──
-    with tab_plan:
+    if tab_plan:
         try:
             get_holding_plan().render()
         except Exception as e:
             _tab_error("My Plan", e)
 
     # ── 1 · Market Overview ───────────────────────────────────────────────────
-    with tab_market:
+    if tab_market:
         if not stock_data_available:
             _no_data_error("Market Overview")
         else:
@@ -329,14 +336,14 @@ Nothing here is financial advice.
                     _tab_error("Market Overview", e)
 
     # ── RIOT Correlation Map (single home for correlation) ───────────────────
-    with tab_corr:
+    if tab_corr:
         try:
             get_riot_corr().render(selected_stocks)
         except Exception as e:
             _tab_error("RIOT Correlation Map", e)
 
     # ── 2 · Trade Signals ─────────────────────────────────────────────────────
-    with tab_signals:
+    if tab_signals:
         st.caption("⏱️ Short-term trading signals (days to weeks). For your long-term Hold/Sell call see 🧭 My Plan.")
         with st.spinner("Computing BUY/HOLD/SELL signals for all 9 stocks…"):
             try:
@@ -345,7 +352,8 @@ Nothing here is financial advice.
                 _tab_error("Trade Signals", e)
 
     # ── 3 · AI Predictions ────────────────────────────────────────────────────
-    with tab_ai:
+    if tab_ai:
+        st.caption("⏱️ Short-term trading tool (days to weeks). Your long-term Hold/Sell call lives in 🧭 My Plan.")
         with st.spinner("Running AI prediction engine…"):
             try:
                 get_next_mover().render(data_fetcher, options_analyzer)
@@ -353,7 +361,8 @@ Nothing here is financial advice.
                 _tab_error("AI Predictions", e)
 
     # ── 3 · Options Center ────────────────────────────────────────────────────
-    with tab_options:
+    if tab_options:
+        st.caption("⏱️ Short-term trading tool (days to weeks). Your long-term Hold/Sell call lives in 🧭 My Plan.")
         if not stock_data_available:
             _no_data_error("Options Center")
         else:
@@ -365,7 +374,8 @@ Nothing here is financial advice.
                     _tab_error("Options Center", e)
 
     # ── 4 · Institutional Flow ────────────────────────────────────────────────
-    with tab_flow:
+    if tab_flow:
+        st.caption("⏱️ Short-term trading tool (days to weeks). Your long-term Hold/Sell call lives in 🧭 My Plan.")
         if not stock_data_available:
             _no_data_error("Institutional Flow")
         else:
@@ -376,7 +386,8 @@ Nothing here is financial advice.
                     _tab_error("Institutional Flow", e)
 
     # ── 5 · Technical Analysis ────────────────────────────────────────────────
-    with tab_ta:
+    if tab_ta:
+        st.caption("⏱️ Short-term trading tool (days to weeks). Your long-term Hold/Sell call lives in 🧭 My Plan.")
         if not stock_data_available:
             _no_data_error("Technical Analysis")
         else:
@@ -396,7 +407,8 @@ Nothing here is financial advice.
                         _tab_error("Advanced TA", e)
 
     # ── 6 · Live Polymarket ────────────────────────────────────────────────────
-    with tab_poly:
+    if tab_poly:
+        st.caption("⏱️ Short-term trading tool (days to weeks). Your long-term Hold/Sell call lives in 🧭 My Plan.")
         with st.spinner("Connecting to Polymarket feed…"):
             try:
                 get_polymarket().render()
@@ -404,7 +416,8 @@ Nothing here is financial advice.
                 _tab_error("Live Polymarket", e)
 
     # ── 7 · Sentiment & News ──────────────────────────────────────────────────
-    with tab_sentiment:
+    if tab_sentiment:
+        st.caption("⏱️ Short-term trading tool (days to weeks). Your long-term Hold/Sell call lives in 🧭 My Plan.")
         with st.spinner("Fetching news sentiment…"):
             try:
                 get_sentiment().render(selected_stocks, MINING_STOCKS)
@@ -412,7 +425,7 @@ Nothing here is financial advice.
                 _tab_error("Sentiment & News", e)
 
     # ── 8 · Risk Center ───────────────────────────────────────────────────────
-    with tab_risk:
+    if tab_risk:
         if not stock_data_available:
             _no_data_error("Risk Center")
         else:
@@ -423,7 +436,7 @@ Nothing here is financial advice.
                     _tab_error("Risk Center", e)
 
     # ── 9 · Portfolio ─────────────────────────────────────────────────────────
-    with tab_portfolio:
+    if tab_portfolio:
         if not stock_data_available:
             _no_data_error("Portfolio")
         else:
@@ -442,7 +455,7 @@ Nothing here is financial advice.
                         _tab_error("RIOT Protection", e)
 
     # ── 10 · Strategy Lab ─────────────────────────────────────────────────────
-    with tab_lab:
+    if tab_lab:
         sub_bt, sub_out, sub_vol = st.tabs([
             "🔬 Backtesting",
             "🔮 Forecast Center",
@@ -490,7 +503,7 @@ Nothing here is financial advice.
                                 _tab_error(f"Volatility Hole ({symbol})", e)
 
     # ── 11 · Reflexivity ──────────────────────────────────────────────────────
-    with tab_reflex:
+    if tab_reflex:
         with st.spinner("Computing reflexivity metrics…"):
             try:
                 get_reflexivity().render(selected_stocks, MINING_STOCKS)
@@ -498,7 +511,7 @@ Nothing here is financial advice.
                 _tab_error("Reflexivity", e)
 
     # ── 12 · Research ─────────────────────────────────────────────────────────
-    with tab_research:
+    if tab_research:
         try:
             import os, pathlib
             html_path = pathlib.Path(__file__).parent / "research.html"

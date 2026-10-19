@@ -22,36 +22,30 @@ class PolymarketTracker:
         data_lineage_panel(["<strong>Direct:</strong> Polymarket REST data when available", "<strong>Live:</strong> Redis stream feed if arb scanners are running", "<strong>Freshness risk:</strong> blank live feed usually means Redis/scanner inactivity, not fake data", "<strong>Validation:</strong> use healthcheck.py to confirm Redis keys and stream freshness"], title="Polymarket Data Quality")
         freshness_note("REST snapshot + optional Redis live stream", "if live feed is blank, confirm scanner and Redis health")
         
-        # Main market tabs — live feed first
-        market_tab0, market_tab1, market_tab2, market_tab3 = st.tabs([
-            "🔴 Live Arb Signals",
-            "🔥 Active Markets", 
-            "📊 Market Analysis", 
-            "🎯 Mining Stocks Bets"
-        ])
-        
-        with market_tab0:
-            self._render_live_arb_feed()
-        
-        # Market overview metrics (REST)
+        # Market overview metrics (REST), then ONE set of tabs.
+        # (Previously the Active/Analysis/Mining tab strip was rendered twice,
+        # the first copy empty.)
         self._render_market_overview()
-        
-        # Main market tabs
-        market_tab1, market_tab2, market_tab3 = st.tabs([
-            "🔥 Active Markets", 
-            "📊 Market Analysis", 
-            "🎯 Mining Stocks Bets"
+
+        market_tab1, market_tab2, market_tab3, market_tab0 = st.tabs([
+            "🔥 Active Markets",
+            "📊 Market Analysis",
+            "🎯 Mining Stocks Bets",
+            "🔴 Live Arb Signals (advanced)",
         ])
-        
+
         with market_tab1:
             self._render_active_markets()
-        
+
         with market_tab2:
             self._render_market_analysis()
-        
+
         with market_tab3:
             self._render_mining_stocks_bets()
-    
+
+        with market_tab0:
+            self._render_live_arb_feed()
+
     def _render_live_arb_feed(self):
         """Render live arbitrage signals from the arb scanner system."""
         st.markdown("### 🔴 Live Polymarket Arbitrage Scanner")

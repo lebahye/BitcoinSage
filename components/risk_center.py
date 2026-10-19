@@ -14,6 +14,7 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 from utils.risk_engine import RiskEngine
 from utils.unified_data_fetcher import DataFetcher
+from utils.explain import explain, HELP
 
 
 class RiskCenter:
@@ -43,6 +44,9 @@ class RiskCenter:
             self._render_position_sizing_tab(selected_stocks, stock_names)
 
         stock_data = self.data_fetcher.get_stock_data(selected_stocks, period='3M')
+        # VaR / Monte Carlo used to treat the SUM OF SHARE PRICES as a portfolio
+        # value (e.g. "$99").  Use a $10,000 equal-weight basket instead.
+        stock_data = self._as_basket(stock_data)
 
         with tab2:
             self._render_var_cvar_tab(stock_data)
@@ -55,6 +59,13 @@ class RiskCenter:
 
         with tab6:
             self._render_beta_analysis_tab(selected_stocks)
+
+    @staticmethod
+    def _as_basket(stock_data, notional=10_000.0):
+        if stock_data is None or stock_data.empty:
+            return stock_data
+        rets = stock_data.pct_change(fill_method=None).mean(axis=1).fillna(0)
+        return pd.DataFrame({"Basket ($10k)": notional * (1 + rets).cumprod()})
 
     # -----------------------------------------------------------------------
     # Tab 1 — Position Sizing (from RiskManagement)
@@ -84,17 +95,19 @@ class RiskCenter:
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 sv = risk_metrics.get('avg_volatility', 0)
-                st.metric("Sector Volatility", f"{sv:.1f}%")
+                st.metric("Sector Volatility", f"{sv:.1f}%", help=HELP["volatility"])
                 if sv > 80: st.error("Very High Risk")
                 elif sv > 60: st.warning("High Risk")
                 elif sv > 40: st.info("Moderate Risk")
                 else: st.success("Lower Risk")
             with col2:
-                st.metric("Max Drawdown", f"{risk_metrics.get('max_drawdown', 0):.1f}%")
+                st.metric("Max Drawdown", f"{risk_metrics.get('max_drawdown', 0):.1f}%",
+                          help="Average of each stock's worst peak-to-trough fall over the past year. " + HELP["drawdown"])
             with col3:
-                st.metric("Sharpe Ratio", f"{risk_metrics.get('sharpe_ratio', 0):.2f}")
+                st.metric("Return / Risk", f"{risk_metrics.get('sharpe_ratio', 0):.2f}",
+                          help="Average yearly return divided by volatility over the past year (a simplified Sharpe ratio, no risk-free rate). Higher = more return per unit of risk; negative = losing money.")
             with col4:
-                st.metric("Avg Correlation", f"{risk_metrics.get('avg_correlation', 0):.2f}")
+                st.metric("Avg Correlation", f"{risk_metrics.get('avg_correlation', 0):.2f}", help=HELP["correlation"])
 
             st.subheader("💡 Risk Capacity Recommendations")
             rec = self._calculate_recommended_allocation(
@@ -202,6 +215,8 @@ class RiskCenter:
 
     def _render_var_cvar_tab(self, stock_data):
         st.subheader("📊 Value at Risk (VaR) & Conditional VaR")
+        st.caption("For a hypothetical **$10,000** split equally across the selected stocks, using the last 3 months of daily prices.")
+        explain("var")
         if stock_data.empty:
             st.warning("No data available for VaR calculation")
             return
@@ -223,14 +238,16 @@ class RiskCenter:
         with col1:
             st.metric(f"VaR ({int(confidence_level*100)}%)",
                       f"{abs(var_results['var_pct']):.2f}%",
-                      delta=f"${abs(var_results['var_dollar']):,.0f}")
+                      delta=f"-${abs(var_results['var_dollar']):,.0f} per $10k",
+                      help=HELP["var"])
         with col2:
             st.metric("CVaR", f"{abs(var_results['cvar_pct']):.2f}%",
-                      delta=f"${abs(var_results['cvar_dollar']):,.0f}")
+                      delta=f"-${abs(var_results['cvar_dollar']):,.0f} per $10k",
+                      help="Average loss on the bad days that are worse than VaR — the 'how bad is bad' number.")
         with col3:
-            st.metric("Daily Volatility", f"{var_results['daily_volatility']:.2f}%")
+            st.metric("Daily Volatility", f"{var_results['daily_volatility']:.2f}%", help=HELP["volatility"])
         with col4:
-            st.metric("Annual Volatility", f"{var_results['annualized_volatility']:.1f}%")
+            st.metric("Annual Volatility", f"{var_results['annualized_volatility']:.1f}%", help=HELP["volatility"])
         st.info(f"**Interpretation:** {var_results['interpretation']}")
         col1, col2 = st.columns(2)
         with col1:
@@ -331,6 +348,8 @@ class RiskCenter:
 
     def _render_monte_carlo_tab(self, stock_data):
         st.subheader("🎲 Monte Carlo Simulation")
+        st.caption("Simulated paths for a **$10,000** equal-weight basket of the selected stocks.")
+        explain("monte_carlo")
         if stock_data.empty:
             st.warning("No data available for Monte Carlo simulation")
             return
@@ -375,6 +394,7 @@ class RiskCenter:
 
     def _render_beta_analysis_tab(self, selected_stocks):
         st.subheader("📈 Beta Analysis vs Bitcoin")
+        explain("beta")
         beta_data = self.risk_engine.calculate_beta_analysis(selected_stocks, benchmark='BTC-USD', period='1y')
         if not beta_data or not beta_data.get('beta_results'):
             beta_data = self.risk_engine.calculate_beta_analysis(selected_stocks, benchmark='BTC-USD', period='3mo')

@@ -21,8 +21,18 @@ _GROUP_COLORS = {
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
+def _cached_ok():
+    d = load_riot_correlations()
+    if not d.get("ok"):
+        raise RuntimeError(d.get("error"))  # don't cache failures
+    return d
+
+
 def _cached():
-    return load_riot_correlations()
+    try:
+        return _cached_ok()
+    except Exception as e:
+        return {"ok": False, "error": str(e) or "Price history unavailable."}
 
 
 def _fmt(x):

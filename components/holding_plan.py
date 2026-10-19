@@ -26,14 +26,18 @@ _STATUS_ICON = {"good": "✅", "warn": "⚠️", "bad": "🚨", "info": "ℹ️"
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
+def _analyst_targets_cached(symbol: str) -> dict:
+    import yfinance as yf
+    info = yf.Ticker(symbol).info or {}   # raises on rate limit -> not cached
+    out = {"low": info.get("targetLowPrice"), "mean": info.get("targetMeanPrice"),
+           "high": info.get("targetHighPrice"), "n": info.get("numberOfAnalystOpinions"),
+           "rating": info.get("recommendationKey")}
+    return out if out["mean"] else {}
+
+
 def _analyst_targets(symbol: str) -> dict:
     try:
-        import yfinance as yf
-        info = yf.Ticker(symbol).info or {}
-        out = {"low": info.get("targetLowPrice"), "mean": info.get("targetMeanPrice"),
-               "high": info.get("targetHighPrice"), "n": info.get("numberOfAnalystOpinions"),
-               "rating": info.get("recommendationKey")}
-        return out if out["mean"] else {}
+        return _analyst_targets_cached(symbol)
     except Exception:
         return {}
 

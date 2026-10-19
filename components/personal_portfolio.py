@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timedelta
 from utils.unified_data_fetcher import DataFetcher
 from utils.tickers import resolve, resolve_keys
+from utils.explain import explain, HELP
 
 TARGETS_FILE = "portfolio_targets.json"
 STOP_LOSS_FILE = "portfolio_stop_loss.json"
@@ -548,19 +549,22 @@ class PersonalPortfolio:
         # ── Headline metrics ────────────────────────────────────────────────
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            st.metric("💰 Total Invested",       f"${total_invested:,.0f}")
+            st.metric("💰 Total Invested",       f"${total_invested:,.0f}",
+                      help="Shares × cost basis for every saved position — what you paid in total.")
         with c2:
-            st.metric("📈 Current Value",         f"${total_value:,.0f}")
+            st.metric("📈 Current Value",         f"${total_value:,.0f}",
+                      help="Shares × latest price (Yahoo Finance, delayed ~15 min).")
         with c3:
             delta_color = "normal" if total_pnl >= 0 else "inverse"
             st.metric("🏦 Total Gain / Loss $",
-                      f"${total_pnl:,.0f}",
+                      f"${total_pnl:,.0f}", help=HELP["cost_basis"],
                       delta_color=delta_color)
         with c4:
             st.metric("📊 Total Gain / Loss %",
                       f"{total_pnl_pct:+.1f}%",
                       delta_color="normal" if total_pnl_pct >= 0 else "inverse")
 
+        explain("cost_basis")
         st.divider()
 
         # ── Target & Stop-Loss price inputs ─────────────────────────────────
@@ -1052,7 +1056,7 @@ class PersonalPortfolio:
         # MEGA Positions - Multi-tranche strategies
         if mega_positions:
             with st.expander("🔥 MEGA Positions - Multi-Tranche Strategies", expanded=True):
-                st.markdown("**These positions are large enough for sophisticated multi-layer strategies like your HIVE plan**")
+                st.markdown("**These positions are large enough for multi-layer (laddered) option strategies.**")
                 
                 for symbol, data in mega_positions.items():
                     st.markdown(f"### {symbol} - {data['shares']:,} shares")
@@ -1087,7 +1091,7 @@ class PersonalPortfolio:
                 for symbol, data in large_positions.items():
                     st.markdown(f"**{symbol}:** {data['shares']:,} shares → {data['shares']//100} contracts available")
                     st.markdown(f"- **Strategy:** Monthly covered calls + protective puts")
-                    st.markdown(f"- **Income Potential:** $2,000-4,000/month per position")
+                    st.caption("Live premium estimates for every position are in 🚀 Total Portfolio Income Projections below.")
         
         # MEDIUM/SMALL Positions
         if medium_positions or small_positions:
@@ -1116,17 +1120,21 @@ class PersonalPortfolio:
             """)
             
             # Show which positions could work together
-            st.markdown("**Optimal Pairing:**")
-            st.markdown("- **Income Generator:** RIOT (10,975 shares) + KEEL (1,700 shares)")
-            st.markdown("- **Protection Targets:** MARA, CLSK, WULF, IREN, CIFR")
+            ranked = sorted(self.positions.items(), key=lambda kv: kv[1]['shares'], reverse=True)
+            gens = [f"{s} ({p['shares']:,} shares)" for s, p in ranked if p['shares'] >= 500][:2]
+            prot = [s for s, p in ranked if 0 < p['shares'] < 500]
+            st.markdown("**Possible pairing (from your saved positions):**")
+            st.markdown(f"- **Income Generator:** {' + '.join(gens) if gens else 'no position with 500+ shares'}")
+            st.markdown(f"- **Protection Targets:** {', '.join(prot) if prot else '—'}")
         
         with tab2:
             st.markdown("**Sector Risk Management**")
-            st.warning("""
+            n_pos = sum(1 for p in self.positions.values() if p['shares'] > 0)
+            st.warning(f"""
             **Portfolio Risk:** You're heavily concentrated in Bitcoin mining
-            - **9 mining positions** = High correlation risk
-            - **MSTR** provides some diversification (software vs mining)
-            - **Suggestion:** Consider VIX calls or QQQ puts for broader protection
+            - **{n_pos} crypto-related positions** that tend to move together (see 🔗 RIOT Correlation Map)
+            - Owning several miners is **not** real diversification — in sell-offs they fall together
+            - The VIX has tended to rise when miners fall, which is why some investors use it as a hedge
             """)
         
         with tab3:
@@ -1153,7 +1161,11 @@ class PersonalPortfolio:
             if not exps:
                 return 0.0, 0.0, "No options listed"
 
-            exp_date = exps[0]
+            # Use the expiry closest to ~30 days so "monthly income" really is monthly
+            # (previously the nearest weekly was multiplied by 12).
+            from datetime import date as _date
+            today = _date.today()
+            exp_date = min(exps, key=lambda e: abs((datetime.strptime(e, "%Y-%m-%d").date() - today).days - 30))
             chain    = ticker.option_chain(exp_date)
             calls    = chain.calls
 
@@ -1193,7 +1205,10 @@ class PersonalPortfolio:
     def _render_total_projections(self, data_fetcher, options_analyzer):
         """Calculate total portfolio income potential using live options IV data."""
         st.subheader("🚀 Total Portfolio Income Projections")
-        st.caption("Monthly income estimates use live nearest-expiry ATM call premiums from Yahoo Finance.")
+        st.caption("Estimates use live Yahoo Finance at-the-money call premiums for the expiry closest to 30 days out. "
+                   "⚠️ Selling at-the-money calls means roughly a 50/50 chance your shares get sold (called away) at "
+                   "that strike — for a long-term holder, out-of-the-money calls (lower income, less risk) are more typical. "
+                   "Premiums change daily; this is not guaranteed income.")
 
         prices = self._fetch_prices(data_fetcher)
 

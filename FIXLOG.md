@@ -100,3 +100,24 @@ Streamlit `AppTest` against live Yahoo Finance data and records uncaught excepti
 - Live result today: RIOT **TRIM ~10% (Medium, 3/8 risk)** — driven by 80% concentration, price 28% below the 200-day average and
   a −51% drawdown; Bitcoin above its 200-day and calm VIX keep it from SELL.
 - Smoke: 17 tests pass, 0 exceptions, 0 error boxes. ✅
+
+### Step 6 — Beginner help, remaining static/mislabelled numbers, speed (Priorities F/G/D)
+- New `utils/explain.py`: plain-English glossary (beta, correlation, VIX, drawdown, volatility, 200-day average, cost basis,
+  target price, analyst targets, projections, decoupling, reflexivity, VaR, Monte Carlo, how the recommendation works).
+  Used as `help=` tooltips on metrics and "ℹ️ What is this?" expanders in My Plan, Correlation Map, Risk Center, Reflexivity, Portfolio.
+- Risk Center: VaR and Monte Carlo now use a $10,000 equal-weight basket (the old "portfolio value" was the sum of share prices);
+  VaR % is now scaled to the chosen horizon like the $ figure; "Sharpe Ratio" relabelled "Return / Risk" with an honest tooltip.
+- Market Overview performance table rebuilt from daily closes (old "Daily %" was the last *hour*, "Week %" the last 5 hours,
+  volatility annualised from hourly returns). Adds 3-month, 1-year and drawdown columns.
+- Portfolio: removed hardcoded "RIOT (10,975 shares) + KEEL (1,700 shares)", "9 mining positions", "your HIVE plan",
+  "$2,000–4,000/month per position"; income projections now use the expiry closest to 30 days (was the nearest weekly × 12)
+  and warn that at-the-money calls risk having shares called away.
+- Trade Signals: targets were Fibonacci *extensions above the 60-day high* even after a 40% crash, and the stop could sit 1%
+  under price → risk/reward like 17:1 and 121:1. Now: next Fibonacci levels above entry (retracements below the high), stop ≥ 1 ATR
+  below entry; labels show which level. New `tests/test_trade_targets.py`.
+- Polymarket: the Active/Analysis/Mining tab strip was rendered twice (first copy empty) — now one strip, live-arb last.
+- Caching: `fetch_daily_closes`, the correlation map and analyst targets no longer cache failed/rate-limited downloads.
+- **Speed / rate limits:** during testing Yahoo returned "Too Many Requests" because every one of the 15 tabs ran on every click.
+  Top-level `st.tabs` replaced with a horizontal section selector — only the chosen section runs. Short-term tools are labelled as such.
+- Smoke (now visits all 15 sections one by one): 18 tests pass, 0 exceptions, 0 failure boxes in any section
+  (remaining red boxes are intentional indicators like "Trading Below VWAP"); whole sweep 41 s, most sections < 2 s. ✅
