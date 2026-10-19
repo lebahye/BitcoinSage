@@ -247,6 +247,11 @@ class HoldingPlan:
             render_cross_tab_panel(symbol, adv.action, add.action if add else None)
         except Exception:
             pass
+        try:
+            from components.signal_reconcile import render_reflexivity_context
+            render_reflexivity_context(symbol)
+        except Exception:
+            pass
 
         self._render_events(symbol, today, events, have_earn, height)
 

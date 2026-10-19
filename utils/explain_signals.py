@@ -90,4 +90,49 @@ SIGNAL_GLOSSARY = {
         "would be around **late 2029** and **2030 would be a down year**. Three cycles is a tiny sample and many analysts "
         "think ETFs are changing the pattern — so treat it as a reason to start staged selling earlier, not as a rule."
     ),
+    "reflexivity": (
+        "Reflexivity — two feedback loops for a bitcoin miner",
+        "**The network loop (stabilising):** Bitcoin rises → mining pays more → miners plug in more machines → the "
+        "network's difficulty rises → each machine earns less again. This loop *pulls margins back down*; it is not a "
+        "boom/bust amplifier.\n\n"
+        "**The capital-markets loop (reflexive, George Soros's idea):** the share price rises → the company sells new "
+        "shares at high prices → buys machines, bitcoin or data centres → per-share numbers and the story improve → the "
+        "price rises more. In reverse: the price falls → new shares are sold cheaply (dilution) or bitcoin is sold → "
+        "value per share falls → the price falls more.\n\n"
+        "**What this tab can and can't do:** it describes which loop seems active today. Its phases were tested over "
+        "2018–2026 and did **not** reliably predict the next 3–6 months, so they are context — 🧭 My Plan stays the "
+        "final word."
+    ),
+    "coupling_index": (
+        "Bitcoin co-movement index (0–100)",
+        "How tightly the stock is tracking — and amplifying — Bitcoin **over the last 30 trading days**: "
+        "correlation (3/8 weight), beta capped at 3× (3/8) and whether both moved the same way (2/8). "
+        "High = moving in lockstep with Bitcoin; low = doing its own thing (company news, AI deals, dilution).\n\n"
+        "It used to be called the 'Reflexivity Index', but it measures co-movement, not the capital-markets loop. "
+        "Backtested 2018–2026: high or low readings did not reliably predict what came next."
+    ),
+    "hashprice": (
+        "Hashprice and miner stress",
+        "**Hashprice** = how many dollars one unit of mining power (1 PH/s) earns per day, from new coins plus fees. "
+        "It falls when Bitcoin falls, when more machines join the network, and it halves overnight at each halving.\n\n"
+        "**Miner stress** compares the Bitcoin price with what it costs to mine one: the network-wide *power-only* "
+        "estimate (from your machine-efficiency and power-price inputs) and Riot's own reported cost to mine. "
+        "When Bitcoin is below a miner's all-in cost, it may have to sell bitcoin or new shares to pay its bills — the "
+        "start of the bust side of the loop."
+    ),
+    "sum_of_parts": (
+        "Riot value check (sum of the parts)",
+        "Adds up what Riot's pieces may be worth — bitcoin held, cash, the AI data-centre lease (today's value of its "
+        "expected yearly operating income), the mining business and anything else you enter — minus debt and the cost "
+        "still needed to build the data centre — and compares it with what the stock market values the whole company at.\n\n"
+        "Facts come from Riot's own filings (dated). Things Riot hasn't disclosed — like the build cost — are **your** "
+        "inputs. A result far above or below the market value is a prompt to look closer, not a buy/sell signal."
+    ),
+    "dilution": (
+        "Dilution (new shares)",
+        "When a company sells new shares, each existing share owns a smaller slice. Miners often fund growth this way, "
+        "especially when their share price is high (the reflexive loop). Riot's share count grew about 45% a year in "
+        "2019–2024; growth has been much slower recently. Prospectus supplements (form 424B5) and shelf registrations "
+        "(S-3) are the SEC filings that usually come with share sales."
+    ),
 }

@@ -313,3 +313,27 @@ unchanged), minimum history, horizon σ bound, dilution, halving-cycle detection
 **Risks / limits:** driver numbers are assumptions, not data. The beta is unstable (regime change after the AI pivot).
 The range is a ±1σ historical stray, not a guarantee. The halving pattern rests on 3 cycles. Published targets come from
 bullish shops. Hardcoded policy dates and facts were verified 2026-10-19 and need a yearly refresh.
+
+# Reflexivity v2 — honest, backtested, Riot-aware (branch global/reflexivity-v2)
+
+**Request:** "Take a look at the reflexivity tab… is there room for improvement and greatness?" Both rounds of the SME review were approved.
+
+| # | Problem (old file:line) | Fix |
+|---|---|---|
+| R1 | Basket = average of share PRICES (old L214); HUT ($68) was 70% of it | `rx.equal_weight_index` builds the basket from daily RETURNS. Adds a focus stock (default: largest miner holding) and a basket that defaults to the miners you hold |
+| R2 | Forecast/advice wording ("Bullish loop active", "momentum likely to continue", "consider hedging", "historically strong buy signal") was never backtested. A quick check showed "Expansionary" was followed by −17% / 63 days | Phases are now descriptive only (Boom / Bust / Miners lagging / Miners leading / No clear loop), each with a plain sentence. The banner (`signal_reconcile.render_reflexivity_banner`) says My Plan is the final word |
+| R3 | Margin used fixed 30 J/TH, $0.05/kWh, 3.125 BTC and no fees; it was called "all-in" | Editable J/TH and $/kWh. Subsidy comes from the live block height and fees from mempool.space (last 1,008 blocks). Labelled power-only. Shows Riot's reported cost to mine: $49,912 ex-D&A / $90,631 incl. (Q2 2026, cited), the derived power cost per BTC, a difficulty-adjusted estimate, and breakeven after the 2028 halving |
+| R4 | blockchain.info was uncached; data was 5 days old without saying so | `utils/network_data.py`: mempool.space first, blockchain.info as fallback, cached 1 h, "data as of" shown everywhere |
+| R5 | The difficulty loop was presented as reflexive; the "Expansion Proxy" label was wrong | Two diagrams: the stabilising network loop vs the reflexive capital-markets loop. Charts relabelled, hashrate and hashprice panels added |
+| R6 | The 30-day beta here vs the long-run sensitivity in Bitcoin-to-2030 was unexplained | Horizon note pulls both numbers from the same `btc_2030._load_fit` |
+| R7 | No backtest | `rx.phase_frame` + `rx.backtest_labels`, 2018–2026, point-in-time. The phase is acted on the next close (BTC's UTC bar ends after the NY close). Cases are non-overlapping per phase; averages use log returns; the verdict needs n≥8 and abs(t)≥2 vs a non-overlapping baseline. Covers phases, index buckets and hashprice-stress, at 63 and 126 days. **Result: no reliable difference anywhere** (RIOT and the 8-stock basket) |
+| R8 | No valuation | Riot sum-of-parts from dated filing facts (`utils/riot_facts.py`): BTC held 11,380 (5,821 pledged), cash $548.9M, lease NOI $365–411M/yr from Jun 2028 for 20 yrs. Debt comes from Yahoo. Build cost, mining and other parts are user inputs with default 0. Also shows the assumption-free "market price for everything except BTC & net cash" |
+| R9 | No dilution view | Share history and yearly growth (`signal_hub.get_shares`). Optional EDGAR 424B/S-3/S-8 check (`utils/edgar.py`, SEC-style User-Agent, cached 6 h); degrades to a link when blocked (403 from this box) |
+| R10 | Miner stress only via a fake margin | Hashprice now vs its 2-year percentile and history (subsidy correct by date, incl. fees) |
+| R11 | Loop strength not tracked | Price→next-quarter issuance (rolling 2-yr corr), BTC→next-3-month hashrate (rolling 2-yr corr), quarterly BTC beta (same as Bitcoin-to-2030) |
+| R12 | — | The regime is **not** in My Plan's call (no edge). My Plan shows a one-line context caption saying why |
+| Low | Rolling beta dated one day late; ">40" vs "<10" message; `pct_change` without `fill_method`; raw tracebacks; coupling shown twice; prices not from signal_hub | All fixed. The beta window now ends on the date shown (tested). Errors show a short N/A warning. Coupling appears once. Prices come from `signal_hub.get_ohlcv` |
+
+**Tests:** `tests/test_reflexivity.py` (24): equal-weight basket uses returns, beta dating, index bounds/N/A, phases, **no look-ahead** in the phase frame, non-overlapping entries, next-day action and full windows only, a planted edge is found while noise isn't, subsidy by height/date, breakeven formula and halving doubling, hashprice, the point-in-time percentile, annuity PV, sum-of-parts arithmetic, dilution, EDGAR parser and graceful failure, cited facts. Suite: 95 passed.
+
+**Risks:** the backtest rests on one 2018–2026 history (about 2 cycles, 12–35 cases per cell). The lease PV ignores the undisclosed build cost unless the user enters it. The difficulty-adjusted Riot cost is an estimate. EDGAR is blocked from some hosts. mempool.space and blockchain.info are free and unauthenticated, so they may rate-limit, and the tab then shows N/A. Riot facts must be refreshed after each quarterly report.

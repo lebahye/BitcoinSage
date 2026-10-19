@@ -44,3 +44,31 @@ def render_plan_banner(watchlist):
         stt = short_term_signal(sym)
         st.info(f"🧭 **Your long-term plan for {sym}: {lt['action']}** (My Plan — the final word). "
                 + reconcile(stt.get("signal"), lt["action"], sym))
+
+
+def render_reflexivity_banner(symbol: str, phase_label: str, edge: bool):
+    """Used at the top of 🔄 Reflexivity: My Plan stays the final word; the phase is context."""
+    from utils.signal_hub import long_term_call
+    lt = long_term_call(symbol)
+    plan = (lt["action"] + (f" (add more? {lt['add_action']})" if lt.get("add_action") else "")) if lt else "N/A"
+    st.info(f"🧭 Your long-term plan for {symbol}: **{plan}** — My Plan is the final word.  \n"
+            f"🔄 Reflexivity phase right now: **{phase_label or 'N/A'}** — "
+            + ("historically this phase was followed by a measurably different 3–6 months (see 🧪 Track record), "
+               "but it is still shown as context, not an instruction." if edge else
+               "**context only**: in the 2018–2026 track record no phase or index level reliably predicted the next "
+               "3–6 months (see 🧪 Track record), so it does not change My Plan's call."))
+
+
+def render_reflexivity_context(symbol: str):
+    """One-line context in 🧭 My Plan (deliberately NOT part of the call — see the Reflexivity track record)."""
+    try:
+        from components.reflexivity_dashboard import live_phase_and_edge
+        ph, label, edge = live_phase_and_edge(symbol)
+    except Exception:
+        return
+    if not label:
+        return
+    st.caption(f"🔄 Reflexivity context for {symbol}: **{label}**. Not used in the call above — "
+               + ("its track record shows a difference, but it is kept as context."
+                  if edge else "in a 2018–2026 backtest no reflexivity phase reliably predicted the next 3–6 months.")
+               + " Details in the 🔄 Reflexivity tab.")
