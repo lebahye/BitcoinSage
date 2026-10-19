@@ -286,3 +286,30 @@ Center range, both labelled as such.
 - Trade Signals and Next-Mover rules remain untested on history; only My Plan has a track record (and shows no timing edge).
 - Volatility bands assume recent volatility persists; crashes are fatter-tailed than the bands (hit rates shown).
 - Each section now shares one 2-year download per ticker; the first load after the 15-minute cache expires is slower.
+
+# BTC-2030 — Bitcoin scenarios to 2030 and the RIOT↔BTC link (branch global/btc-2030)
+
+**Request:** "there is no Bitcoin price correlation with future price prediction of the stocks… e.g. in 2030 if RIOT is at a
+bull of $40 or higher, show the price of bitcoin at that price. Make sure the BTC prediction takes policy, politics,
+financial adoption, rising inflation etc. into account."
+
+| # | Gap found | Fix |
+|---|-----------|-----|
+| B1 | No Bitcoin view anywhere in the 2030 plan. My Plan's Bear/Base/Bull were RIOT-only yearly returns that quietly assumed something about BTC | `utils/btc_scenarios.py`: Bear/Base/Bull/Super-bull from the **live** BTC price. Growth/yr = sum of 8 editable drivers (adoption trend, 2028 halving, ETF/institutional, US policy, money/inflation/rates, corporate treasuries, global adoption, risks). Each driver has a beginner tooltip and dated sources (Fed 2026-09-16, BLS CPI 2026-10-14, Fed H.6 M2 2026-09-22, Senate cloture 2026-09-15, DGI 2026-10-15, SBR EO 2025-03-06). Published forecasts (ARK, Standard Chartered, Bernstein) are shown only as reference markers with links |
+| B2 | Only a daily correlation (~0.5) existed, which says nothing about 2030 | `utils/riot_btc_link.py`: quarterly log-return fit (beta 1.12 ± 0.21, R² 0.47, 2018–2026), level-fit stray σ and AR(1) persistence for horizon ranges, rolling 3-yr beta/R² (0.17–1.73). The **last 3 yrs beta is 0.17 (R² 0.01)**, so both regimes can be selected. Point-in-time: `as_of`, with a leakage test |
+| B3 | No way to answer "what BTC price lines up with RIOT $40" | Forward (BTC path → RIOT with range) and inverse (RIOT $X → BTC needed with range) mappings, exact inverses (tested). Non-BTC factors: dilution (default = measured 12-mo share growth from Yahoo), hashprice headwind, energy, AI/HPC uplift. Shows "N/A — Bitcoin alone can't plausibly do it" when BTC would need over 100× |
+| B4 | Two 2030 views could disagree unexplained | Reconciliation rows give the BTC price each My Plan Bear/Base/Bull case implies. A two-panel chart overlays the BTC paths, RIOT-implied paths and the My Plan dashed lines, with a caption explaining why they differ |
+| B5 | Missing context | Halving-cycle table computed from data (peaks 17.2/17.9/17.5 months after halving; falls of −83%/−77% afterwards). Next-halving estimate from the live block height. Peak window Apr–Oct 2029, so 2030 was historically a down year. Dated policy/macro watchlist (FOMC, CPI, midterms, new Congress/CLARITY, halving, 2028 election, SBR bill). Sell/rotate milestone checklist with live status |
+
+**Single source of truth:** today's RIOT and BTC prices come from the same My Plan closes. Long history comes from
+`signal_hub.get_ohlcv(…, "max")`, and share counts from the new `signal_hub.get_shares`. Every data failure shows N/A; the
+panel is wrapped so it can never break My Plan.
+
+**Tests:** `tests/test_btc_2030.py` (16): scenario sum/compounding/ordering, driver edits are isolated, no live price
+means no scenarios, every source has a URL and date, forward↔inverse round trip and range direction, unreachable/tiny
+beta, factor signs, synthetic beta recovery, **no future leakage** (future data ×50 leaves the point-in-time fit
+unchanged), minimum history, horizon σ bound, dilution, halving-cycle detection. The suite is 71 passed.
+
+**Risks / limits:** driver numbers are assumptions, not data. The beta is unstable (regime change after the AI pivot).
+The range is a ±1σ historical stray, not a guarantee. The halving pattern rests on 3 cycles. Published targets come from
+bullish shops. Hardcoded policy dates and facts were verified 2026-10-19 and need a yearly refresh.
