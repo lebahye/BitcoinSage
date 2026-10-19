@@ -310,6 +310,7 @@ Nothing here is financial advice.
         "🔄 Reflexivity",
         "🔬 Strategy Lab",
         "🧪 Edge Lab",
+        "♻️ Trim & Rebuy",
         "🚦 Trade Signals",
         "🎯 Next-Mover Ranking",
         "⚡ Options Center",
@@ -326,7 +327,8 @@ Nothing here is financial advice.
 
     (tab_verdict, tab_plan, tab_portfolio, tab_corr, tab_market, tab_risk, tab_reflex, tab_lab,
      tab_signals, tab_ai, tab_options, tab_flow, tab_ta,
-     tab_sentiment, tab_poly, tab_research) = [view == name for name in SECTIONS if name != "🧪 Edge Lab"]
+     tab_sentiment, tab_poly, tab_research) = [view == name for name in SECTIONS
+                                            if name not in ("🧪 Edge Lab", "♻️ Trim & Rebuy")]
 
     # ── 🧪 Edge Lab: experimental research tools, each with its own honest backtest (not used by My Plan) ──
     if view == "🧪 Edge Lab":
@@ -335,6 +337,14 @@ Nothing here is financial advice.
             render_edge_lab()
         except Exception as e:
             _tab_error("Edge Lab", e)
+
+    # ── ♻️ Trim & Rebuy: sell-part / buy-back-cheaper rules, backtested after NY + federal tax (not used by My Plan) ──
+    if view == "♻️ Trim & Rebuy":
+        try:
+            from components.trim_rebuy import render as render_trim_rebuy
+            render_trim_rebuy()
+        except Exception as e:
+            _tab_error("Trim & Rebuy", e)
 
     # ── Stock Verdict: one call per stock from every tab (= My Plan's call for holdings) ──
     if tab_verdict:

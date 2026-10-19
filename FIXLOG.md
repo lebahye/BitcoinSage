@@ -452,3 +452,32 @@ Facts coverage (`utils/company_facts.py`, LAST_VERIFIED 2026-10-19, every value 
 cost to mine, converts, AI MW): no company is "full". RIOT 5/6 (debt from Yahoo); CIFR, WULF, CORZ 5/6 (no cost to mine);
 CLSK 4/6; KEEL 3/6; HUT 2/6; MARA, BTDR, MSTR, IREN, BTBT 1/6. Not verified → N/A (e.g. MARA cash/debt, IREN BTC/debt).
 Tests: tests/test_all_stocks.py (30) run every generalised function for 5–14 tickers.
+
+# ♻️ Trim & Rebuy (branch global/trim-rebuy, from main @ 9852ccb)
+
+New page: can selling part of a holding and buying it back cheaper leave you with **more shares** than holding,
+after NY State + NYC + federal tax and costs? Experimental; **not wired into My Plan or ⚖️ Verdict**. Not tax advice.
+
+| Piece | What |
+|---|---|
+| `utils/tax_ny.py` | 2026 federal ordinary brackets, long-term 0/15/20% bands stacked on ordinary income, 3.8% NIIT, NY State 2026 rates (Ch. 59 L. 2025), NYC resident rates, federal and NY standard deductions; single and married filing jointly. ST/LT netting, $3,000 loss limit, carryforward keeps its character. IRA/Roth = no tax. Incremental tax = tax(other income + gains) − tax(other income). Every table cited + dated in `SOURCES` (IRS Rev. Proc. 2025-32, IRS Topics 409/559, Pub. 550, NY DTF, NYC Comptroller, Schwab FIFO default). |
+| `utils/trim_rebuy.py` | Lot ledger (FIFO = Schwab default, or specific-ID highest-cost-first); holding period restarts on rebuy; wash sale both ways (±30 days; disallowed loss → replacement lot's basis; holding period tacked); yearly settlement. 7 pre-registered rules (A1–A3 stretch, E1–E2 earnings, B1 Bollinger, B2 ATR), every one with a max-wait timeout and a 5-day cool-down; signal at close t → trade at close t+1. In-sample 60% / hold-out 40%; random-date baseline (same trims, sizes and lengths on random non-overlapping dates, 200 runs, seeded). Edge = positive pre-tax and after-tax in full sample, after-tax in both halves, p ≤ 0.05 full and ≤ 0.10 hold-out, ≥6 trips (≥3 hold-out). Covered-call overlay (Black-Scholes, labelled assumptions) and tax-loss-harvest swap into the most correlated peer for 31 days (point-in-time peer pick). Live harvest calculator from the user's cost basis. |
+| `components/trim_rebuy.py` | Page: stock dropdown (holdings first + every miner) that follows the Verdict; tax settings (filing status, other income placeholder with a prominent note, NYC toggle, FIFO/specific-ID, slippage, "bought > 1 year ago"); verdict banner; rule table with IRA/Roth (pre-tax) and taxable (after-tax) columns; rule detail (hit rate, avg win/loss, worst miss, days out, drawdown, share-count chart vs hold, trade log with est. tax); today's zones **only if a rule passed** (else context only); covered calls; harvest; sources + brackets; CPA note. |
+| `app.py` | One menu entry "♻️ Trim & Rebuy" (lazy import, `_tab_error` wrapper). |
+
+After-tax metric: after-tax share-equivalents = (after-tax value if everything were sold on the last day) ÷ last price,
+for the rule and for holding from the same start (the hold's deferred tax counts too). Taxes along the way are paid from
+outside cash (nominal); a leftover loss carryforward is valued at the long-term marginal rate for both sides. A harsher
+view ("tax paid from shares") is shown too. Backtest = last 10 years, start cost = first day's price (long-term).
+
+Result (single, $100k placeholder income, NYC, FIFO, 0.05% slippage): **no rule passes for any of the 9 holdings** (or HUT).
+Tests: tests/test_tax_ny.py (8 hand-checked worked examples), tests/test_trim_rebuy.py (17: wash sale ×4, holding period
+reset, FIFO vs specific-ID, $3k limit/carryforward in the ledger, no look-ahead, next-close execution, timeout,
+determinism, earnings N/A, reaction-day timing, random-baseline shape, Black-Scholes, harvest calculator, 31-day swap).
+
+Not modelled / risks: NY supplemental "recapture" tax above NY AGI $107,650; credits, AMT, itemizing; 2026 rules applied to
+every past year; tax settled each Dec 31 (no estimated-tax timing); wash-sale adjustment that crosses an already
+settled year is booked in the rebuy year; unknown real lot dates (one "bought > 1 year ago" checkbox); purchases in other
+accounts/IRAs (wash sales) not visible; "different company = not substantially identical" is a judgment; option prices
+are modelled (realized vol ×1.0/×1.2, 5% haircut, fractional contracts), not quotes; 7 rules + 3 CC + TLH tested = multiple
+testing, so a single pass could be luck.
