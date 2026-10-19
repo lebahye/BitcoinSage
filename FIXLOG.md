@@ -398,3 +398,33 @@ Suite: 133 passed. AppTest: RIOT, MARA, CLSK and HUT each about 9 s cold with no
 - The GPD fit on overlapping 21-day windows is a rough base rate.
 - The Kelly results depend on the 2020–2026 path and a 3% cash assumption.
 - Yahoo is free and unauthenticated, so it may rate-limit; the page then shows an error.
+
+# 🔎 Deeper evidence — 8 extra analyses on the Stock Verdict (branch global/verdict-deep, from main @ 7282c14)
+
+Everything new lives in one **collapsed** "Deeper evidence" expander under the verdict card, grouped
+Long-cycle / Company / Market mood. Each row: one-line takeaway, tooltip, source + as-of date,
+tested/untested status, weight. The main card and the action are unchanged — deep rows can only move
+confidence (≤ one notch, same rule as before) and never flip the action; held stocks still = My Plan.
+
+| # | Analysis | Data | Weight |
+|---|---|---|---|
+| 1 | MVRV-Z, Puell, realized price | CoinMetrics community API (free). Realized cap = market cap ÷ MVRV because `CapRealUSD` is paywalled (documented). | 5 only if the current zone's point-in-time backtest on the stock shows an edge (n≥8, \|t\|≥2, 2-day publication lag); else 0 |
+| 2 | Miner treasury (mined / sold / held) | `utils/deep_facts.py` TREASURY — RIOT Q1+Q2 2026, MARA Q2, CLSK Jun 2026, each with filing/press URL | 0 (context; flows are lumpy) |
+| 3 | Converts & warrants → potential shares | RIOT 0.75% 2030 notes ($594.4M, $14.86, 39.99M shares), warrants, RSUs, $500M ATM — 10-Q Jun 30 2026 + notes 8-K. Also shown in Reflexivity → Dilution tab. | 5 (structural) |
+| 4 | AI/HPC peer EV per contracted MW / per HPC revenue | Contracted MW + value per peer (cited trackers / filings, editable table) × live EV from yfinance | 5 (structural); N/A outside the AI-hosting peer set |
+| 5 | Options fear: 25-delta skew, max pain, put/call OI | yfinance chain, expiry 20–75 days, Black-Scholes deltas | 0 (untested); loaded only on the "Load live market data" tick |
+| 6 | Prediction markets: CLARITY Act, House/Senate, Fed | Polymarket gamma + Kalshi public API (bid/ask mid) | 0 (untested context); live tick only |
+| 7 | Volatility regime (calm/normal/stormy) | 21-day realised vol ranked vs trailing 2 years; backtested point-in-time | 5 only with edge; currently 0 for all tested tickers |
+| 8 | Short interest & days to cover | yfinance shortPercentOfFloat / shortRatio | 0 (untested) |
+
+Fixes during the build: Kalshi `last_price` was stale → use quote mid; Riot's Q2 "sold" in a press
+headline was a net change → derived from the 10-Q H1 figure (holdings reconcile within 25 BTC, tested);
+regime takeaway now says "calm" means small daily moves, not direction.
+
+Verification: py_compile; pytest 123 passed (14 new in tests/test_deep_evidence.py, incl. no-look-ahead,
+converts cross-check principal×rate, facts cited+dated, deep rows never flip the action, all-sources-down → N/A);
+headless ok; full smoke 54 s, 0 exceptions, error counts = baseline; Verdict AppTest RIOT/MARA/CLSK/HUT +
+live toggle 0 exceptions; Verdict = My Plan for RIOT/MARA. No app.py edits.
+
+Risks: peer MW/contract figures come from secondary trackers and go stale; Polymarket slugs can be retired
+(→ N/A); yfinance short interest is ~2 weeks old; only RIOT has a converts map so far.

@@ -44,6 +44,11 @@ class Evidence:
     weight: float          # 0 = context only
     tested: str            # 'backtested', 'measured', 'personal rule', 'model (untested)', 'untested'
     help: str = ""
+    # Deeper-evidence rows only (shown in the collapsed section, grouped):
+    group: str = ""        # 'Long-cycle' | 'Company' | 'Market mood'
+    takeaway: str = ""     # one plain-English line
+    source_ref: str = ""   # where the number comes from (name + link)
+    as_of: str = ""        # date of the data
 
 
 @dataclass

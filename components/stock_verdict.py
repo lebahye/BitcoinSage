@@ -35,7 +35,7 @@ TIP = {
                   "points are to a threshold), then moves at most one notch if the weighted evidence clearly agrees or "
                   "clearly disagrees.",
     "weight": "How much this row counts. 0 = shown for context only (short-term or never tested). The weighted rows "
-              "add up to 100 for a stock you own.",
+              "are relative: each row counts in proportion to its weight.",
     "tested": "backtested = checked against past prices in this app · measured = a fact from filings/prices · "
               "personal rule = your own risk rule, not a forecast · model/untested = depends on assumptions.",
     "lean": "Which way this piece of evidence points: bullish (good for holding/adding), bearish (argues for "
@@ -366,7 +366,7 @@ def _changes(symbol, adv, add, held, positions, closes, extra) -> List[str]:
     return list(dict.fromkeys(out))[:8]
 
 
-def build_for(symbol: str, include_slow: bool = False):
+def build_for(symbol: str, include_slow: bool = False, include_live: bool = False):
     """Gather every tab's evidence for one ticker and build the verdict.  Returns (Verdict, adv, add, positions)."""
     from components.holding_plan import get_advice, get_add_advice, load_backtest
     symbol = resolve(symbol)
@@ -384,6 +384,11 @@ def build_for(symbol: str, include_slow: bool = False):
     b0 = extra.get("b0") or (float(closes["BTC-USD"].dropna().iloc[-1]) if "BTC-USD" in closes else None)
     ev += _reflexivity_rows(symbol, s0, b0)
     ev += _context_rows(symbol, closes, held, include_slow)
+    try:
+        from components.verdict_deep import deep_rows
+        ev += deep_rows(symbol, s0, include_live)     # grouped 'Deeper evidence' rows (live ones weight 0)
+    except Exception:
+        pass
     if held:
         base_conf = adv.confidence
     else:
@@ -428,7 +433,7 @@ class StockVerdict:
         slow = c2.checkbox("Load slower extras", value=False, key="verdict_slow",
                            help="Adds the Next-Mover ranking (scans 9 miners; ~10–30 s the first time). Weight 0 either way.")
         with st.spinner(f"Gathering every tab's data for {sym}…"):
-            vd, adv, add, positions = build_for(sym, slow)
+            vd, adv, add, positions = build_for(sym, slow, st.session_state.get("verdict_deep_live", False))
         self._card(vd, adv)
         if sym not in MINING_STOCKS:
             st.caption(f"ℹ️ {sym} isn't a bitcoin miner. My Plan's checks (Bitcoin trend, miner peers) and the Bitcoin-to-"
@@ -441,6 +446,11 @@ class StockVerdict:
         for b in vd.why:
             st.markdown("- " + b)
         self._table(vd)
+        try:
+            from components import verdict_deep
+            verdict_deep.render([e for e in vd.evidence if e.group])
+        except Exception as e:
+            st.caption(f"🔎 Deeper evidence unavailable right now ({type(e).__name__}) — N/A.")
         self._disagree(vd)
         st.markdown("#### What would change the verdict")
         if vd.changes:
@@ -456,6 +466,8 @@ class StockVerdict:
                 "SELL = avoid (5+ market risk points).\n"
                 "- **Weights:** My Plan market checks 30 · your position rules 25 · Add/Wait rule 10 · Bitcoin-to-2030 10 · "
                 "dilution 5 · sum-of-parts 5 (RIOT) · miner stress 5 (RIOT) · price-swing risk 10 (not-held only). "
+                "Deeper evidence: convertible dilution 5 and AI peer valuation 5 (structural); MVRV-Z, Puell and the "
+                "volatility regime 5 each **only** if their backtest shows an edge for today's reading. "
                 "Everything else is weight 0.\n"
                 "- **Evidence moves confidence, not the action** — at most one notch.\n"
                 "- **Honest limits:** My Plan's 5-year track record shows its timing rules did not beat holding; the "
@@ -483,7 +495,7 @@ class StockVerdict:
     def _table(self, vd):
         st.markdown("#### Evidence from every tab")
         df = pd.DataFrame([{"Source": e.source, "Reading": e.reading, "Leans": V.lean_word(e.lean),
-                            "Weight": e.weight, "Tested?": e.tested, "What it is": e.help} for e in vd.evidence])
+                            "Weight": e.weight, "Tested?": e.tested, "What it is": e.help} for e in vd.evidence if not e.group])
         st.dataframe(df, hide_index=True, use_container_width=True,
                      column_config={"Leans": st.column_config.TextColumn("Leans", help=TIP["lean"]),
                                     "Weight": st.column_config.NumberColumn("Weight", help=TIP["weight"], format="%g"),
@@ -494,10 +506,11 @@ class StockVerdict:
 
     def _disagree(self, vd):
         st.markdown("#### Where the tabs disagree")
-        if not vd.disagreements:
+        dis = [e for e in vd.disagreements if not e.group or e.weight > 0]   # deep context rows stay in their section
+        if not dis:
             st.caption("No tab points the other way right now.")
             return
-        for e in vd.disagreements:
+        for e in dis:
             tag = "counts toward confidence" if e.weight > 0 else "context only — doesn't change the call"
             st.markdown(f"- **{e.source}** leans **{V.lean_word(e.lean)}** ({tag}): {e.reading}")
         st.caption("Disagreement is normal: short-term tools answer 'next few weeks', the verdict answers "

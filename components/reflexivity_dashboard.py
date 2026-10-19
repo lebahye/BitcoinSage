@@ -466,6 +466,7 @@ class ReflexivityDashboard:
             st.dataframe(pd.DataFrame({"Year": yr.index.year, "Shares (M)": (yr / 1e6).round(1),
                                        "Growth": [_pct(v) for v in yr.pct_change(fill_method=None)]}),
                          hide_index=True, use_container_width=True)
+        self._converts_map(focus, sh)
         st.markdown("**Recent SEC filings that can come with share sales**")
         if focus != "RIOT":
             st.caption("SEC check set up for RIOT only (N/A).")
@@ -483,6 +484,36 @@ class ReflexivityDashboard:
                                     "Link": f["url"]} for f in r["filings"]]),
                      hide_index=True, use_container_width=True,
                      column_config={"Link": st.column_config.LinkColumn("Link")})
+
+    def _converts_map(self, focus, sh):
+        """Convertible notes / warrants / ATM → potential new shares (cited facts; same numbers as the Verdict)."""
+        from utils.deep_facts import CONVERTS
+        from utils import deep_evidence as de
+        st.markdown("**Potential new shares: convertible notes, warrants, share-sale programme**")
+        f = CONVERTS.get(focus)
+        if not f:
+            st.caption(f"No cited convertible/warrant facts on file for {focus} (N/A).")
+            return
+        px = _close(focus)
+        price = float(px.iloc[-1]) if len(px) else None
+        d = de.convert_dilution(f, price)
+        rows = [{"Instrument": n["name"], "Principal": _m(n["principal"]), "Conversion price": _usd(n["conversion_price"], 2),
+                 "Price ÷ conversion": "N/A" if n["moneyness"] is None else f"{n['moneyness']:.2f}",
+                 "New shares if converted": f"{n['shares']/1e6:,.1f}M", "vs shares today": f"{n['pct']:.1%}",
+                 "Maturity": f"{n['maturity']:%b %d %Y}"} for n in d["notes"]]
+        rows += [{"Instrument": o["name"], "Principal": "—", "Conversion price": "—", "Price ÷ conversion": "—",
+                  "New shares if converted": f"{o['shares']/1e6:,.2f}M", "vs shares today": f"{o['shares']/d['shares_outstanding']:.1%}",
+                  "Maturity": "—"} for o in f.get("other", [])]
+        if f.get("atm_capacity_usd"):
+            rows.append({"Instrument": f"At-the-market share programme (unused, {f['atm_as_of']:%b %Y})",
+                         "Principal": _m(f["atm_capacity_usd"]), "Conversion price": "market", "Price ÷ conversion": "—",
+                         "New shares if converted": "N/A" if d["atm_shares"] is None else f"≈{d['atm_shares']/1e6:,.1f}M at today's price",
+                         "vs shares today": "N/A" if d["atm_pct"] is None else f"{d['atm_pct']:.1%}", "Maturity": "—"})
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        n = f["notes"][0] if f.get("notes") else {}
+        st.caption(f"Shares outstanding {d['shares_outstanding']/1e6:,.1f}M ({f['shares_as_of']:%b %d %Y}). "
+                   + n.get("status_note", "") + " " + n.get("settlement", "").capitalize() + ". Sources: "
+                   + " · ".join(f"[filing]({u})" for u in n.get("sources", [])))
 
     # ── ⛏️ Hashprice & miner stress ──────────────────────────────────────
     def _tab_hashprice(self, btc, net, rewards, fees):
