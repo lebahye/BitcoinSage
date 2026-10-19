@@ -185,8 +185,9 @@ class NextMoverDashboard:
                 with col3:
                     st.metric(
                         "₿ BTC Correlation",
-                        f"{btc:.0f}/100",
-                        help="Score based on this stock's beta relative to current BTC trend"
+                        "n/a" if pd.isna(btc) else f"{btc:.0f}/100",
+                        help="Score based on this stock's 3-month beta to Bitcoin relative to the current BTC trend. "
+                             "'n/a' = not enough overlapping trading days; the composite then re-weights the other factors."
                     )
                     if btc_sig:
                         st.caption(f"• {btc_sig}")

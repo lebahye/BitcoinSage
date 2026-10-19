@@ -255,35 +255,25 @@ class NextMoverEngine:
         scores = {}
         
         try:
-            # Get Bitcoin data
-            btc_data = self.data_fetcher.get_stock_data(['BTC-USD'], period=period)
-            if btc_data.empty:
+            # Daily closes, with BTC lined up on the stock trading calendar.
+            # (The old code joined hourly UTC BTC bars to hourly New York stock
+            # bars, which never matched, so every stock silently got 50/100.)
+            from utils.market_data import fetch_daily_closes, beta_corr, to_daily
+            closes = fetch_daily_closes(tuple(list(self.mining_stocks) + ['BTC-USD']), '3mo')
+            if closes.empty or 'BTC-USD' not in closes.columns:
                 return {}
-            
-            btc_returns = btc_data['BTC-USD'].pct_change().dropna()
-            btc_trend = ((btc_data['BTC-USD'].iloc[-1] / btc_data['BTC-USD'].iloc[0]) - 1) * 100
-            
-            # Get stock data
-            stock_data = self.data_fetcher.get_stock_data(self.mining_stocks, period=period)
-            
+            btc_close = closes['BTC-USD'].dropna()
+            btc_trend = ((btc_close.iloc[-1] / btc_close.iloc[0]) - 1) * 100
+
             for symbol in self.mining_stocks:
-                if symbol not in stock_data.columns:
+                if symbol not in closes.columns:
                     continue
-                
-                stock_returns = stock_data[symbol].pct_change().dropna()
-                
-                # Align indices
-                common_idx = btc_returns.index.intersection(stock_returns.index)
-                if len(common_idx) < 10:
-                    continue
-                
-                btc_aligned = btc_returns.loc[common_idx]
-                stock_aligned = stock_returns.loc[common_idx]
-                
-                # Calculate correlation and beta
-                correlation = btc_aligned.corr(stock_aligned)
-                beta = stock_aligned.cov(btc_aligned) / btc_aligned.var() if btc_aligned.var() > 0 else 1
-                
+                bc = beta_corr(closes[symbol].dropna(), btc_close)
+                if bc is None:
+                    continue  # no score -> shown as "n/a", never a fake 50
+                correlation = bc['corr']
+                beta = bc['beta']
+
                 # Score: High beta + BTC trending up = bullish
                 if btc_trend > 0:  # BTC is rallying
                     if beta > 1.5:
@@ -395,16 +385,21 @@ class NextMoverEngine:
             # Extract scores (default to 50 if missing)
             rs_score   = relative_strength.get(symbol, {}).get('score', 50)
             tech_score = technical_setup.get(symbol, {}).get('score', 50)
-            btc_score  = btc_correlation.get(symbol, {}).get('score', 50)
+            btc_live   = symbol in btc_correlation
+            # Missing BTC factor: re-weight the other factors instead of inserting a fake 50
+            btc_score  = btc_correlation.get(symbol, {}).get('score', float('nan'))
             sent_score = sentiment_scores.get(symbol, {}).get('score', 50)
 
             # Updated weights: RS=30%, Technical=40%, BTC=15%, Sentiment=15%
-            composite = (
-                rs_score   * 0.30 +
-                tech_score * 0.40 +
-                btc_score  * 0.15 +
-                sent_score * 0.15
-            )
+            if btc_live:
+                composite = (
+                    rs_score   * 0.30 +
+                    tech_score * 0.40 +
+                    btc_score  * 0.15 +
+                    sent_score * 0.15
+                )
+            else:
+                composite = (rs_score * 0.30 + tech_score * 0.40 + sent_score * 0.15) / 0.85
 
             # Build reasoning
             reasons = []
@@ -419,7 +414,7 @@ class NextMoverEngine:
                 reasons.extend([f"📈 {sig}" for sig in tech_signals[:2]])
 
             btc_signal = btc_correlation.get(symbol, {}).get('signal', '')
-            if btc_signal and btc_score > 55:
+            if btc_signal and btc_live and btc_score > 55:
                 reasons.append(f"₿ {btc_signal}")
 
             sent_label = sentiment_scores.get(symbol, {}).get('label', 'Neutral')
@@ -435,6 +430,7 @@ class NextMoverEngine:
                 'RS Score': rs_score,
                 'Tech Score': tech_score,
                 'BTC Score': btc_score,
+                'BTC Live': btc_live,
                 'Sentiment Score': sent_score,
                 'Sentiment Live': sentiment_scores.get(symbol, {}).get('live', False),
                 'Key Signals': ' | '.join(reasons) if reasons else 'Neutral Setup',

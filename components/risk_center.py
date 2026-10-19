@@ -290,25 +290,32 @@ class RiskCenter:
             st.warning("No data available for stress testing")
             return
         stress_results = self.risk_engine.run_stress_test(stock_data, selected_stocks)
-        if not stress_results:
-            st.error("Unable to run stress test")
+        if not stress_results or stress_results.get('error'):
+            st.warning(f"⚠️ Insufficient data — stress test not shown. "
+                       f"{(stress_results or {}).get('error', '')}")
             return
+        st.caption("Assumes an equal-dollar basket of the selected stocks. Dollar figures are per "
+                   "**$10,000 invested**. Beta is measured from 1 year of daily prices, with Bitcoin "
+                   "lined up on stock trading days (weekend moves count toward Monday).")
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Current Portfolio Value", f"${stress_results['current_value']:,.0f}")
+            st.metric("Example Basket", f"${stress_results['current_value']:,.0f}",
+                      help="A hypothetical $10,000 split equally across the selected stocks.")
         with col2:
             beta = stress_results['beta_to_bitcoin']
             st.metric("Beta to Bitcoin", f"{beta:.2f}",
-                      delta="🔴" if beta > 1.5 else "🟡" if beta > 1.0 else "🟢")
+                      delta="🔴" if beta > 1.5 else "🟡" if beta > 1.0 else "🟢",
+                      help=f"Measured over {stress_results['n_days']} shared trading days. "
+                           "Beta 1.5 means: when Bitcoin moves 1%, this basket has typically moved 1.5%.")
         st.info(f"**Risk Assessment:** {stress_results['recommendation']}")
         scenarios_df = pd.DataFrame(stress_results['stress_scenarios'])
         for _, scenario in scenarios_df.iterrows():
             with st.expander(f"{scenario['scenario']} - {scenario['description']}", expanded=False):
                 col1, col2, col3 = st.columns(3)
-                with col1: st.metric("Market Drop", f"{scenario['market_drop_pct']:.0f}%")
-                with col2: st.metric("Portfolio Drop", f"{scenario['portfolio_drop_pct']:.1f}%")
-                with col3: st.metric("Dollar Loss", f"${abs(scenario['portfolio_loss_dollar']):,.0f}")
-                st.metric("Portfolio Value After", f"${scenario['portfolio_value_after']:,.0f}")
+                with col1: st.metric("Bitcoin Drop", f"{scenario['market_drop_pct']:.0f}%")
+                with col2: st.metric("Expected Basket Drop", f"{scenario['portfolio_drop_pct']:.1f}%")
+                with col3: st.metric("Loss per $10k", f"${abs(scenario['portfolio_loss_dollar']):,.0f}")
+                st.metric("Value After (per $10k)", f"${scenario['portfolio_value_after']:,.0f}")
         fig = go.Figure(go.Bar(
             x=[s['scenario'] for s in stress_results['stress_scenarios']],
             y=[s['portfolio_drop_pct'] for s in stress_results['stress_scenarios']],

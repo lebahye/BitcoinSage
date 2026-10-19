@@ -4,6 +4,7 @@ import yfinance as yf
 from datetime import datetime, timedelta
 import streamlit as st
 from scipy.stats import norm
+from utils.market_data import fetch_daily_closes, align_frame, beta_corr, aligned_returns
 
 class RiskEngine:
     """Professional Portfolio Risk Engine - VaR, CVaR, Stress Testing, Monte Carlo"""
@@ -136,96 +137,62 @@ class RiskEngine:
             st.error(f"Error calculating correlation matrix: {str(e)}")
             return {}
     
-    def run_stress_test(self, portfolio_data, symbols):
+    def run_stress_test(self, portfolio_data, symbols, notional=10_000.0):
         """
-        Stress test portfolio under extreme scenarios
-        Shows potential losses in market crashes
+        Stress test: "if Bitcoin falls X%, how much would an equal-weight basket
+        of these stocks be expected to fall?"  Uses the basket's measured daily
+        beta to BTC (1y, aligned on the stock calendar).  If beta cannot be
+        measured we return {'error': ...} — never a made-up beta.
+        Dollar figures are per `notional` invested (default $10,000).
         """
         try:
-            current_value = portfolio_data.iloc[-1].sum()
-            returns = portfolio_data.pct_change().dropna()
-            portfolio_returns = returns.mean(axis=1)
-            
-            scenarios = {
-                'minor_correction': {
-                    'name': 'Minor Correction (-10%)',
-                    'market_drop': -0.10,
-                    'description': 'Typical market pullback'
-                },
-                'major_correction': {
-                    'name': 'Major Correction (-20%)',
-                    'market_drop': -0.20,
-                    'description': 'Bear market territory'
-                },
-                'market_crash': {
-                    'name': 'Market Crash (-30%)',
-                    'market_drop': -0.30,
-                    'description': '2020 COVID-style crash'
-                },
-                'severe_crash': {
-                    'name': 'Severe Crash (-50%)',
-                    'market_drop': -0.50,
-                    'description': '2008 financial crisis level'
-                },
-                'bitcoin_crash': {
-                    'name': 'Bitcoin Crash (-70%)',
-                    'market_drop': -0.70,
-                    'description': 'Crypto winter scenario'
-                }
-            }
-            
-            btc_ticker = yf.Ticker("BTC-USD")
-            btc_hist = btc_ticker.history(period='1y')
-            
-            if not btc_hist.empty and not portfolio_data.empty:
-                btc_returns = btc_hist['Close'].pct_change().dropna()
-                
-                combined_data = pd.DataFrame({
-                    'portfolio': portfolio_returns,
-                    'btc': btc_returns
-                }).dropna()
-                
-                if len(combined_data) > 30:
-                    beta = combined_data['portfolio'].cov(combined_data['btc']) / combined_data['btc'].var()
-                else:
-                    beta = 1.5
-            else:
-                beta = 1.5
-            
+            closes = fetch_daily_closes(tuple(list(symbols) + ["BTC-USD"]), "1y")
+            if closes.empty or "BTC-USD" not in closes.columns:
+                return {'error': "Bitcoin price history unavailable from Yahoo Finance."}
+            stock_cols = [c for c in symbols if c in closes.columns]
+            if not stock_cols:
+                return {'error': "No stock price history available."}
+            aligned = align_frame(closes[stock_cols + ["BTC-USD"]])
+            basket = aligned[stock_cols].pct_change(fill_method=None).mean(axis=1)
+            basket_px = (1 + basket.fillna(0)).cumprod()
+            bc = beta_corr(basket_px, aligned["BTC-USD"])
+            if bc is None:
+                return {'error': "Not enough overlapping trading days between these stocks and Bitcoin to measure beta."}
+            beta = bc['beta']
+
+            scenarios = [
+                ('Bitcoin -10%', -0.10, 'Ordinary pullback (happens several times a year)'),
+                ('Bitcoin -20%', -0.20, 'Sharp correction'),
+                ('Bitcoin -30%', -0.30, 'Bear-market leg (e.g. mid-2021, mid-2022)'),
+                ('Bitcoin -50%', -0.50, 'Deep bear market'),
+                ('Bitcoin -70%', -0.70, 'Crypto-winter level (2018, 2022 peak-to-trough)'),
+            ]
             stress_results = []
-            
-            for scenario_key, scenario in scenarios.items():
-                market_drop = scenario['market_drop']
-                
-                portfolio_drop = market_drop * beta
-                
-                portfolio_loss = current_value * portfolio_drop
-                portfolio_value_after = current_value + portfolio_loss
-                
+            for name, btc_drop, desc in scenarios:
+                # a stock can't fall more than 100%
+                drop = max(-1.0, btc_drop * beta)
                 stress_results.append({
-                    'scenario': scenario['name'],
-                    'description': scenario['description'],
-                    'market_drop_pct': market_drop * 100,
-                    'portfolio_drop_pct': portfolio_drop * 100,
-                    'portfolio_loss_dollar': float(portfolio_loss),
-                    'portfolio_value_after': float(portfolio_value_after),
-                    'severity': 'LOW' if abs(market_drop) < 0.15 else 'MODERATE' if abs(market_drop) < 0.35 else 'SEVERE'
+                    'scenario': name,
+                    'description': desc,
+                    'market_drop_pct': btc_drop * 100,
+                    'portfolio_drop_pct': drop * 100,
+                    'portfolio_loss_dollar': float(notional * drop),
+                    'portfolio_value_after': float(notional * (1 + drop)),
+                    'severity': 'LOW' if abs(btc_drop) < 0.15 else 'MODERATE' if abs(btc_drop) < 0.35 else 'SEVERE',
                 })
-            
             worst_scenario = min(stress_results, key=lambda x: x['portfolio_value_after'])
-            
             return {
-                'current_value': float(current_value),
+                'current_value': float(notional),
                 'beta_to_bitcoin': float(beta),
+                'corr_to_bitcoin': float(bc['corr']),
+                'n_days': bc['n_days'],
                 'stress_scenarios': stress_results,
                 'worst_scenario': worst_scenario,
-                'recommendation': self._stress_test_recommendation(beta, worst_scenario)
+                'recommendation': self._stress_test_recommendation(beta, worst_scenario),
             }
-            
         except Exception as e:
-            st.error(f"Error running stress test: {str(e)}")
-            return {}
-    
+            return {'error': f"Stress test failed: {e}"}
+
     def _stress_test_recommendation(self, beta, worst_scenario):
         """Generate stress test recommendation"""
         loss_pct = abs(worst_scenario['portfolio_drop_pct'])
@@ -325,48 +292,31 @@ class RiskEngine:
         Beta < 1 = Less volatile than Bitcoin
         """
         try:
-            benchmark_ticker = yf.Ticker(benchmark)
-            benchmark_hist = benchmark_ticker.history(period=period)
-            
-            if benchmark_hist.empty:
+            closes = fetch_daily_closes(tuple(list(symbols) + [benchmark]), period)
+            if closes.empty or benchmark not in closes.columns:
                 st.warning(f"Could not fetch {benchmark} data for beta calculation")
                 return {}
-            
-            benchmark_returns = benchmark_hist['Close'].pct_change().dropna()
+            benchmark_close = closes[benchmark].dropna()
             
             beta_results = []
             failed_symbols = []
             
             for symbol in symbols:
                 try:
-                    ticker = yf.Ticker(symbol)
-                    hist = ticker.history(period=period)
-                    
-                    if hist.empty:
+                    if symbol not in closes.columns or closes[symbol].dropna().empty:
                         failed_symbols.append(f"{symbol} (no data)")
                         continue
-                    
-                    stock_returns = hist['Close'].pct_change().dropna()
-                    
-                    combined = pd.DataFrame({
-                        'stock': stock_returns,
-                        'benchmark': benchmark_returns
-                    }).dropna()
-                    
-                    if len(combined) < 10:
-                        failed_symbols.append(f"{symbol} (insufficient data: {len(combined)} days)")
+                    stock_close = closes[symbol].dropna()
+                    # Align BTC onto the stock trading calendar (weekends folded into Monday)
+                    bc = beta_corr(stock_close, benchmark_close)
+                    if bc is None:
+                        n = len(aligned_returns(stock_close, benchmark_close))
+                        failed_symbols.append(f"{symbol} (insufficient data: {n} days)")
                         continue
-                    
-                    covariance = combined['stock'].cov(combined['benchmark'])
-                    benchmark_variance = combined['benchmark'].var()
-                    
-                    beta = covariance / benchmark_variance if benchmark_variance != 0 else 1.0
-                    
-                    correlation = combined['stock'].corr(combined['benchmark'])
-                    
-                    r_squared = correlation ** 2
-                    
-                    stock_std = stock_returns.std() * np.sqrt(252)
+                    beta = bc['beta']
+                    correlation = bc['corr']
+                    r_squared = bc['r_squared']
+                    stock_std = stock_close.pct_change(fill_method=None).dropna().std() * np.sqrt(252)
                     
                     if beta > 1.5:
                         risk_level = "VERY HIGH"

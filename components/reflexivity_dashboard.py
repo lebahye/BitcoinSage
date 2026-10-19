@@ -7,6 +7,8 @@ Blockchain.info hashrate/difficulty used as enhancement only (fails gracefully).
 """
 
 from utils.styles import data_lineage_panel, freshness_note
+from utils.market_data import fetch_daily_closes, align_frame
+from utils.explain import explain
 
 import streamlit as st
 import pandas as pd
@@ -31,20 +33,21 @@ SECONDS_PER_DAY   = 86_400
 # ─── Data fetchers (each independently fault-tolerant) ───────────────────────
 
 def _fetch_prices(symbols: list, period: str = "1y") -> pd.DataFrame:
-    """Fetch BTC + miner closing prices via yfinance. Returns empty df on failure."""
+    """Fetch BTC + miner daily closes, aligned on the US stock trading calendar.
+
+    BTC trades 7 days a week and Yahoo stamps it in UTC; stocks are stamped in
+    New York time.  We convert both to calendar dates and carry BTC's latest
+    close onto each stock trading day, so Monday's BTC return includes the
+    weekend.  (Previously the two indexes never matched -> 0 shared days.)
+    """
     tickers = ["BTC-USD"] + [s for s in symbols if s != "BTC-USD"]
-    out = {}
-    for t in tickers:
-        try:
-            hist = yf.Ticker(t).history(period=period, timeout=10)
-            if not hist.empty:
-                out[t] = hist["Close"].copy()
-        except Exception:
-            pass
-    if not out:
+    raw = fetch_daily_closes(tuple(tickers), period)
+    if raw.empty:
         return pd.DataFrame()
-    df = pd.DataFrame(out)
-    return df.dropna(how="all")
+    stock_cols = [c for c in raw.columns if c != "BTC-USD"]
+    if not stock_cols:
+        return raw
+    return align_frame(raw).dropna(how="all")
 
 
 def _fetch_blockchain_chart(chart: str, timespan: str = "1year") -> pd.DataFrame:
@@ -104,8 +107,10 @@ def _estimate_breakeven(difficulty_series: pd.Series) -> pd.Series:
     return (kwh_day * KWH_PRICE) / btc_day
 
 
-def _detect_phase(btc30: float, miner30: float, corr: float, margin: float):
+def _detect_phase(btc30: float, miner30: float, corr: float, margin):
     hi = abs(corr) > 0.6
+    if margin is None:
+        margin = float("nan")  # margin-dependent phases simply can't trigger
     if btc30 >  0.05 and miner30 >  0.05 and margin > 0.30 and hi:
         return "🚀 Expansionary",  "#00cc66", \
             "Classic boom: rising prices justify expansion, expansion drives prices higher. Bullish loop active."
@@ -128,16 +133,22 @@ def _detect_phase(btc30: float, miner30: float, corr: float, margin: float):
         "No dominant reflexive loop. Market digesting — watch for loop re-engagement."
 
 
-def _reflexivity_index(corr: float, beta: float, margin: float,
+def _reflexivity_index(corr: float, beta: float, margin,
                        btc_mom: float, miner_mom: float) -> dict:
+    """0-100 composite.  If margin is unknown (no difficulty data) its 20%
+    weight is dropped and the other weights are rescaled — never guessed."""
     coupling   = min(abs(corr), 1.0) * 100
     amplif     = min(abs(beta) / 3.0, 1.0) * 100
     alignment  = 100.0 if (btc_mom * miner_mom) > 0 else 0.0
-    margin_sc  = min(max(margin, 0), 1.0) * 100
-    score      = 0.30*coupling + 0.30*amplif + 0.20*alignment + 0.20*margin_sc
+    if margin is None:
+        margin_sc = None
+        score = (0.30*coupling + 0.30*amplif + 0.20*alignment) / 0.80
+    else:
+        margin_sc = min(max(margin, 0), 1.0) * 100
+        score = 0.30*coupling + 0.30*amplif + 0.20*alignment + 0.20*margin_sc
     return dict(index=round(score,1), coupling=round(coupling,1),
                 amplification=round(amplif,1), alignment=round(alignment,1),
-                margin_score=round(margin_sc,1))
+                margin_score=None if margin_sc is None else round(margin_sc,1))
 
 
 # ─── Main component ───────────────────────────────────────────────────────────
@@ -188,8 +199,8 @@ class ReflexivityDashboard:
             st.caption("⚠️ Hashrate data unavailable (blockchain.info blocked on this host). "
                        "Using miner stocks as hashrate proxy.")
         if diff_df.empty:
-            st.caption("⚠️ Difficulty data unavailable. "
-                       "Using fixed-cost breakeven estimate ($30K).")
+            st.caption("⚠️ Network difficulty data unavailable — miner breakeven/margin "
+                       "can't be estimated right now, so margin is left out of the index.")
 
         # ── Step 3: Core calculations ─────────────────────────────────────────
         btc          = prices_df["BTC-USD"].dropna()
@@ -199,10 +210,17 @@ class ReflexivityDashboard:
         corr_series  = _rolling_corr(miners_avg, btc, window=30)
         beta_series  = _rolling_beta(miners_avg, btc, window=30)
 
-        corr_val     = float(corr_series.dropna().iloc[-1]) if not corr_series.dropna().empty else 0.0
-        beta_val     = float(beta_series.iloc[-1])          if not beta_series.empty         else 1.0
-        btc_mom30    = float(btc.pct_change(30).iloc[-1])   if len(btc) > 30                 else 0.0
-        miner_mom30  = float(miners_avg.pct_change(30).iloc[-1]) if len(miners_avg) > 30     else 0.0
+        corr_clean   = corr_series.dropna()
+        beta_clean   = beta_series.dropna()
+        if corr_clean.empty or beta_clean.empty or len(btc) <= 30 or len(miners_avg) <= 30:
+            st.warning("⚠️ Insufficient data: fewer than ~30 shared trading days between Bitcoin "
+                       "and the selected miners, so coupling, beta and the Reflexivity Index "
+                       "can't be measured. Try a refresh or select different stocks.")
+            return
+        corr_val     = float(corr_clean.iloc[-1])
+        beta_val     = float(beta_clean.iloc[-1])
+        btc_mom30    = float(btc.pct_change(30, fill_method=None).iloc[-1])
+        miner_mom30  = float(miners_avg.pct_change(30, fill_method=None).iloc[-1])
 
         # Margin estimate
         if not diff_df.empty:
@@ -214,12 +232,12 @@ class ReflexivityDashboard:
                 cur_margin = float(margin_s.dropna().iloc[-1])
                 cur_beven  = float(beven_s.iloc[-1])
             except Exception:
-                cur_margin = max(0.0, (btc.iloc[-1] - 30_000) / btc.iloc[-1])
-                cur_beven  = 30_000.0
+                cur_margin = None
+                cur_beven  = None
                 margin_s   = None
         else:
-            cur_margin = max(0.0, (btc.iloc[-1] - 30_000) / btc.iloc[-1])
-            cur_beven  = 30_000.0
+            cur_margin = None
+            cur_beven  = None
             margin_s   = None
 
         ri = _reflexivity_index(corr_val, beta_val, cur_margin, btc_mom30, miner_mom30)
@@ -295,9 +313,14 @@ class ReflexivityDashboard:
                 (c1, "🔗 Coupling",       ri["coupling"],      f"30d correlation with BTC: {corr:.2f}"),
                 (c2, "📡 Amplification",  ri["amplification"], f"30d beta vs BTC: {beta:.2f}×"),
                 (c3, "🎯 Alignment",      ri["alignment"],     "Same direction = loop active"),
-                (c4, "💰 Margin Health",  ri["margin_score"],  f"Est. miner margin: {margin*100:.1f}%"),
+                (c4, "💰 Margin Health",  ri["margin_score"],
+                 "Est. miner margin unavailable (no network difficulty data)" if margin is None
+                 else f"Est. miner margin: {margin*100:.1f}% (assumes 30 J/TH rigs, $0.05/kWh power)"),
             ]:
                 with col:
+                    if val is None:
+                        st.metric(label, "n/a", help=tip)
+                        continue
                     st.metric(label, f"{val:.0f}/100", help=tip)
                     bar_color = ("#00cc66" if val > 60 else "#ffaa00" if val > 30 else "#ff4444")
                     st.markdown(
@@ -308,11 +331,20 @@ class ReflexivityDashboard:
             st.markdown("---")
             st.subheader("📈 Market State")
             m1, m2, m3, m4, m5 = st.columns(5)
-            m1.metric("BTC Price",      f"${btc.iloc[-1]:,.0f}",  f"{btc_mom*100:+.1f}% (30d)")
-            m2.metric("Miner vs BTC",   f"{(miner_mom-btc_mom)*100:+.1f}%", "spread")
-            m3.metric("Miner Beta",     f"{beta:.2f}×")
-            m4.metric("Coupling",       f"{corr:.2f}")
-            m5.metric("Breakeven BTC",  f"${beven:,.0f}", f"{margin*100:.1f}% margin")
+            m1.metric("BTC Price",      f"${btc.iloc[-1]:,.0f}",  f"{btc_mom*100:+.1f}% (30 trading days)")
+            m2.metric("Miner vs BTC",   f"{(miner_mom-btc_mom)*100:+.1f}%", "spread",
+                      help="Miner basket 30-day return minus Bitcoin's. Negative = miners lagging Bitcoin.")
+            m3.metric("Miner Beta",     f"{beta:.2f}×",
+                      help="Last 30 trading days: if Bitcoin moved 1%, miners moved this many %.")
+            m4.metric("Coupling",       f"{corr:.2f}",
+                      help="30-day correlation of daily moves (1 = lockstep, 0 = unrelated).")
+            if beven is None:
+                m5.metric("Breakeven BTC", "n/a", help="Needs blockchain.info difficulty data, which is unavailable right now.")
+            else:
+                m5.metric("Breakeven BTC (est.)", f"${beven:,.0f}", f"{margin*100:.1f}% margin",
+                          help="Rough all-in power cost to mine 1 BTC, estimated from network difficulty "
+                               "assuming 30 J/TH machines and $0.05/kWh electricity. An estimate, not a reported number.")
+            explain("reflexivity")
 
         except Exception as e:
             st.error(f"Index tab error: {e}")
@@ -497,11 +529,18 @@ class ReflexivityDashboard:
             if sdata:
                 sdf = pd.DataFrame(sdata)
                 fig = px.scatter(sdf, x="btc", y="miner", color="symbol",
-                                 trendline="ols", template="plotly_dark",
+                                 template="plotly_dark",
                                  title="BTC 30d Return vs Miner 30d Return",
                                  labels={"btc": "BTC 30d Return (%)",
                                          "miner": "Miner 30d Return (%)"})
                 x_r = np.linspace(sdf["btc"].min(), sdf["btc"].max(), 100)
+                # per-symbol least-squares fit (numpy; no statsmodels dependency)
+                for sym_, g in sdf.groupby("symbol"):
+                    if len(g) >= 10 and g["btc"].var() > 0:
+                        slope, icpt = np.polyfit(g["btc"], g["miner"], 1)
+                        fig.add_trace(go.Scatter(x=x_r, y=slope * x_r + icpt, mode="lines",
+                                                 name=f"{sym_} fit ({slope:.1f}×)",
+                                                 line=dict(width=2)))
                 for mult, col, nm in [(1,"white","1×"),(2,"#ffaa00","2×"),(3,"#ff4444","3×")]:
                     fig.add_trace(go.Scatter(x=x_r, y=x_r*mult, mode="lines",
                                              name=nm, line=dict(color=col, dash="dot", width=1)))
@@ -612,7 +651,7 @@ class ReflexivityDashboard:
 
             btc_mom = btc.pct_change(30).iloc[-1]
             min_mom = miners_avg.pct_change(30).iloc[-1]
-            beta    = float(beta_series.iloc[-1]) if not beta_series.empty else 1.0
+            beta    = float(beta_series.dropna().iloc[-1]) if not beta_series.dropna().empty else float("nan")
 
             # 1 — Loop direction
             if btc_mom > .10 and min_mom > .15 and ri["coupling"] > 60:
@@ -634,7 +673,9 @@ class ReflexivityDashboard:
                     "Miners not amplifying BTC. Loop is weak — dormant phase or miner-specific stress."))
 
             # 3 — Margin
-            if margin < .05:
+            if margin is None:
+                pass
+            elif margin < .05:
                 signals.append(("#ff2222", "🚨 CRITICAL", f"Breakeven Territory ({margin*100:.1f}% margin)",
                     "Forced BTC selling imminent. This is the Soros bust accelerant — "
                     "selling BTC drives price lower → more selling. Watch hash ribbon reversal."))
