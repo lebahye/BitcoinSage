@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from utils.explain import explain, HELP, GLOSSARY
-from utils.holding_advisor import advise, compute_facts, scenario_paths, years_to
+from utils.holding_advisor import advise, compute_facts, scenario_paths, years_to, add_signal, peer_vs_200
 from utils.market_data import fetch_daily_closes, fetched_at
 from utils.tickers import WATCHLIST, MINING_STOCKS, resolve
 
@@ -94,6 +94,18 @@ def get_advice(symbol: str = "RIOT"):
     return adv, closes, positions, targets
 
 
+def get_add_advice(symbol, closes, positions):
+    """ADD / WAIT for one holding, from the same price bundle."""
+    last = {s: float(closes[s].dropna().iloc[-1]) for s in positions if s in closes.columns and closes[s].notna().any()}
+    port_value = sum(positions[s]["shares"] * last[s] for s in last) or None
+    pos = positions.get(symbol, {})
+    weight = (pos.get("shares", 0) * last[symbol] / port_value) if (port_value and symbol in last) else None
+    btc = compute_facts(closes["BTC-USD"]) if "BTC-USD" in closes.columns else {}
+    vix = float(closes["^VIX"].dropna().iloc[-1]) if "^VIX" in closes.columns and closes["^VIX"].notna().any() else None
+    peers = [t for t in WATCHLIST if t != symbol]
+    return add_signal(compute_facts(closes[symbol]), btc, vix, peer_vs_200(closes, peers), weight)
+
+
 class HoldingPlan:
     def render(self):
         st.header("🧭 My Plan — Hold, Trim, Sell or Rotate?")
@@ -146,6 +158,8 @@ class HoldingPlan:
                 title, body = GLOSSARY[k]
                 st.markdown(f"**{title}**  \n{body}")
                 st.markdown("---")
+
+        self._render_add(symbol, closes, positions)
 
         st.subheader("🔁 What would change my mind")
         for line in adv.change_my_mind:
@@ -238,6 +252,32 @@ class HoldingPlan:
 - **Know your re-check triggers** (listed above under "What would change my mind") and look again after each earnings report.
 - **Taxes:** shares held over a year usually qualify for lower long-term capital-gains rates in the US. Check with a tax adviser before large sales.
 """)
+
+    # ------------------------------------------------------------------
+    def _render_add(self, symbol, closes, positions):
+        st.subheader("➕ Good time to add more?")
+        a = get_add_advice(symbol, closes, positions)
+        color = "#00c853" if a.action == "ADD" else "#90a4ae"
+        st.markdown(
+            f'<div style="background:{color}1a;border-left:5px solid {color};border-radius:8px;padding:12px 16px;margin:4px 0 8px">'
+            f'<b style="color:{color};font-size:1.3rem">{"➕ ADD" if a.action == "ADD" else "⏸️ WAIT"}</b>'
+            f' <span style="color:#bbb">· confidence {a.confidence}</span><br>'
+            f'<span style="color:#eee">{a.headline}</span></div>', unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Is it on sale?** (need 2 of 3)")
+            for chk in a.oversold:
+                st.markdown(f"{'✅' if chk.status == 'good' else '❔' if chk.status == 'missing' else '▫️'} "
+                            f"**{chk.name}** — {chk.detail}")
+        with c2:
+            st.markdown("**Is the backdrop healthy?** (need all 3)")
+            for chk in a.backdrop:
+                st.markdown(f"{_STATUS_ICON.get(chk.status, '•')} **{chk.name}** — {chk.detail}")
+        with st.expander("📍 Price / condition levels that would trigger ADD"):
+            for lv in a.levels:
+                st.markdown(f"- {lv}")
+        explain("add_signal")
+        explain("rsi")
 
     # ------------------------------------------------------------------
     def _render_all_holdings(self, closes, positions, targets):

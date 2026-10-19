@@ -141,3 +141,24 @@ Streamlit `AppTest` against live Yahoo Finance data and records uncaught excepti
 - "Share of portfolio" only counts holdings saved in the app, not the user's whole net worth.
 - `use_container_width` deprecation warnings (Streamlit pinned at 1.49.1, still works; removal is after 2025-12-31 in newer versions).
 - The section selector replaces tabs: users click a section name at the top instead of a tab (same order/names).
+
+---
+
+# Branch `global/signals-v2` (based on origin/main @ 93e344a — no new Replit pushes found on 2026-10-19)
+
+Same test gate after every step: `py_compile`, `pytest tests`, `streamlit run --server.headless` health check
+(`/workspace/bs_tools/headless.sh`), and the AppTest sweep of all 15 sections (`run_smoke.sh`).
+Note: the smoke "error boxes" count per section (Risk Center 6, Polymarket 18, …) is content styled with
+`st.error` (e.g. "Large drawdown"), unchanged from the baseline; the filtered failure list stays empty.
+
+## V2 Step 1 — Good-time-to-add (ADD / WAIT) signal
+- `utils/holding_advisor.py`: Wilder RSI(14) (`rsi_wilder`, `rsi_series`) added to `compute_facts`;
+  new pure `add_rule()` (scalars only, so the backtest uses the exact same rule) and `add_signal()`.
+  ADD = at least 2 of 3 "on sale" checks (RSI < 35; ≥20% below 200-day; ≥40% below 52-week high)
+  AND all 3 backdrop checks (BTC ≥ −5% vs its 200-day; VIX < 25; equal-weight miner-peer basket ≥ −10% vs its 200-day).
+  Never ADD if the stock is > 40% of the portfolio — says so explicitly. Outputs confidence and trigger price levels.
+- `market_risk_score()` mirrors the market-only risk points of `advise()` (test asserts they match) for the backtest.
+  Existing Hold/Trim/Sell/Rotate logic untouched.
+- `components/holding_plan.py`: new "➕ Good time to add more?" block inside My Plan; glossary entries `rsi`, `add_signal`.
+- Live today: RIOT = WAIT (High) — 80% of portfolio > 40% cap; also peer basket −41% vs its 200-day.
+- Tests: 24 pass (6 new). Headless: ok. Smoke: 0 exceptions, 0 failure boxes; My Plan shows the new block.

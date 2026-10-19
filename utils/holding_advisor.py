@@ -72,8 +72,156 @@ def compute_facts(px: pd.Series) -> Dict[str, Optional[float]]:
         "ret_3m": (last / float(px.iloc[-63]) - 1.0) if len(px) > 63 else None,
         "ret_1y": (last / float(px.iloc[-252]) - 1.0) if len(px) > 252 else None,
         "vol_1y": float(r.iloc[-252:].std() * np.sqrt(252)) if len(r) > 60 else None,
+        "rsi14": rsi_wilder(px),
     }
     return f
+
+
+def rsi_wilder(px: pd.Series, n: int = 14) -> Optional[float]:
+    """Wilder's 14-day RSI of a close series (last value). None if too short."""
+    px = px.dropna()
+    if len(px) < n + 1:
+        return None
+    d = px.diff().dropna()
+    gain = d.clip(lower=0).ewm(alpha=1 / n, adjust=False).mean().iloc[-1]
+    loss = (-d.clip(upper=0)).ewm(alpha=1 / n, adjust=False).mean().iloc[-1]
+    if loss == 0:
+        return 100.0
+    return float(100 - 100 / (1 + gain / loss))
+
+
+def rsi_series(px: pd.Series, n: int = 14) -> pd.Series:
+    """Full Wilder RSI series (each value uses only data up to that day)."""
+    d = px.diff()
+    gain = d.clip(lower=0).ewm(alpha=1 / n, adjust=False).mean()
+    loss = (-d.clip(upper=0)).ewm(alpha=1 / n, adjust=False).mean()
+    rs = gain / loss.replace(0, np.nan)
+    out = 100 - 100 / (1 + rs)
+    return out.where(loss != 0, 100.0)
+
+
+# ── Thresholds shared by the live call AND the historical track record ──────
+ADD_RSI_MAX = 35.0          # RSI below this = oversold
+ADD_BELOW_200_PCT = -0.20   # price at least 20% under its 200-day average
+ADD_DRAWDOWN_PCT = -0.40    # at least 40% under the 52-week high
+ADD_BTC_VS_200_MIN = -0.05  # Bitcoin no more than 5% under its own 200-day
+ADD_VIX_MAX = 25.0          # market not in fear
+ADD_PEER_VS_200_MIN = -0.10 # miner peer basket no more than 10% under its 200-day
+SIZE_CAP = 0.40             # never suggest adding above 40% of portfolio
+
+
+def market_risk_score(price, sma50, sma200, drawdown, btc_price, btc_sma200, vix, peer_gap=None,
+                      peer_diverging=False) -> int:
+    """Market-only risk points, identical thresholds to `advise()` (position-specific
+    points like concentration are added there).  Used by the backtest."""
+    pts = 0
+    if sma200:
+        if price < sma200:
+            pts += 1
+            if sma50 and sma50 < sma200:
+                pts += 1
+    if drawdown is not None and drawdown <= -0.4:
+        pts += 1
+    if btc_price and btc_sma200 and btc_price < btc_sma200:
+        pts += 1
+    if vix is not None:
+        pts += 2 if vix >= 30 else 1 if vix >= 25 else 0
+    if peer_diverging and peer_gap is not None and peer_gap < 0:
+        pts += 1
+    return pts
+
+
+@dataclass
+class AddAdvice:
+    action: str                       # ADD | WAIT
+    confidence: str                   # High | Medium | Low
+    headline: str
+    oversold: List[Check] = field(default_factory=list)
+    backdrop: List[Check] = field(default_factory=list)
+    levels: List[str] = field(default_factory=list)
+    n_oversold: int = 0
+
+
+def add_rule(rsi, price, sma200, drawdown, btc_price, btc_sma200, vix, peer_vs_200) -> dict:
+    """Pure rule (scalars only) so the live call and the backtest are identical.
+    Returns which conditions passed; ADD needs >=2 of 3 oversold AND every backdrop check."""
+    below200 = (price / sma200 - 1) if (price and sma200) else None
+    btc_gap = (btc_price / btc_sma200 - 1) if (btc_price and btc_sma200) else None
+    ov = {
+        "rsi": None if rsi is None else rsi < ADD_RSI_MAX,
+        "below200": None if below200 is None else below200 <= ADD_BELOW_200_PCT,
+        "drawdown": None if drawdown is None else drawdown <= ADD_DRAWDOWN_PCT,
+    }
+    bd = {
+        "btc": None if btc_gap is None else btc_gap >= ADD_BTC_VS_200_MIN,
+        "vix": None if vix is None else vix < ADD_VIX_MAX,
+        "peers": None if peer_vs_200 is None else peer_vs_200 >= ADD_PEER_VS_200_MIN,
+    }
+    n_ov = sum(1 for v in ov.values() if v)
+    backdrop_ok = all(v is True for v in bd.values())
+    return {"oversold": ov, "backdrop": bd, "n_oversold": n_ov, "below200": below200, "btc_gap": btc_gap,
+            "signal": n_ov >= 2 and backdrop_ok}
+
+
+def add_signal(facts: Dict[str, Optional[float]], btc_facts: Dict[str, Optional[float]], vix: Optional[float],
+               peer_vs_200: Optional[float], weight: Optional[float]) -> AddAdvice:
+    """Is this a good time for a risk-averse 2030 holder to ADD?  Default answer: WAIT."""
+    price = facts.get("price")
+    if price is None:
+        return AddAdvice("WAIT", "Low", "No price data — can't judge an entry.")
+    r = add_rule(facts.get("rsi14"), price, facts.get("sma200"), facts.get("drawdown"),
+                 btc_facts.get("price"), btc_facts.get("sma200"), vix, peer_vs_200)
+    ov, bd = r["oversold"], r["backdrop"]
+    st_ = lambda v: "missing" if v is None else ("good" if v else "info")
+    rsi = facts.get("rsi14"); sma200 = facts.get("sma200"); hi = facts.get("high_52w")
+    oversold = [
+        Check("RSI (14-day)", st_(ov["rsi"]), f"{rsi:.0f} — oversold below {ADD_RSI_MAX:.0f}." if rsi is not None else "n/a", 0, "rsi"),
+        Check("Distance below 200-day average", st_(ov["below200"]),
+              f"{r['below200']:+.0%} (needs {ADD_BELOW_200_PCT:.0%} or lower)." if r["below200"] is not None else "n/a", 0, "sma200"),
+        Check("Drawdown from 52-week high", st_(ov["drawdown"]),
+              f"{facts['drawdown']:+.0%} (needs {ADD_DRAWDOWN_PCT:.0%} or lower)." if facts.get("drawdown") is not None else "n/a",
+              0, "drawdown"),
+    ]
+    bstat = lambda v: "missing" if v is None else ("good" if v else "warn")
+    backdrop = [
+        Check("Bitcoin trend healthy", bstat(bd["btc"]),
+              f"Bitcoin {r['btc_gap']:+.0%} vs its 200-day (needs ≥ {ADD_BTC_VS_200_MIN:.0%})." if r["btc_gap"] is not None else "n/a"),
+        Check("Market fear not spiking", bstat(bd["vix"]), f"VIX {vix:.1f} (needs < {ADD_VIX_MAX:.0f})." if vix is not None else "n/a", 0, "vix"),
+        Check("Miner peers healthy", bstat(bd["peers"]),
+              f"Peer basket {peer_vs_200:+.0%} vs its 200-day (needs ≥ {ADD_PEER_VS_200_MIN:.0%})." if peer_vs_200 is not None else "n/a"),
+    ]
+    levels = []
+    if sma200:
+        levels.append(f"Price at or below ${sma200 * (1 + ADD_BELOW_200_PCT):,.2f} (20% under the 200-day average).")
+    if hi:
+        levels.append(f"Price at or below ${hi * (1 + ADD_DRAWDOWN_PCT):,.2f} (40% under the 52-week high).")
+    levels.append(f"RSI under {ADD_RSI_MAX:.0f} (now {rsi:.0f})." if rsi is not None else f"RSI under {ADD_RSI_MAX:.0f}.")
+    if btc_facts.get("sma200"):
+        levels.append(f"Bitcoin at or above ${btc_facts['sma200'] * (1 + ADD_BTC_VS_200_MIN):,.0f}.")
+    levels.append(f"VIX below {ADD_VIX_MAX:.0f}.")
+    missing = sum(1 for v in list(ov.values()) + list(bd.values()) if v is None)
+
+    if weight is not None and weight > SIZE_CAP:
+        return AddAdvice("WAIT", "High",
+                         f"WAIT — don't add: this stock is already {weight:.0%} of your portfolio (cap {SIZE_CAP:.0%}). "
+                         "For a risk-averse plan, new money is better spent elsewhere."
+                         + (" (The price setup itself would qualify as an ADD.)" if r["signal"] else ""),
+                         oversold, backdrop, levels, r["n_oversold"])
+    if r["signal"]:
+        conf = "High" if r["n_oversold"] == 3 else "Medium"
+        size_note = " Keep it small — the position is already 25–40% of your portfolio." if (weight or 0) > 0.25 else             " Consider adding in 2–3 pieces over several weeks rather than all at once."
+        return AddAdvice("ADD", conf, f"ADD — deeply oversold ({r['n_oversold']}/3) while Bitcoin, peers and market fear "
+                         "all look healthy." + size_note, oversold, backdrop, levels, r["n_oversold"])
+    why = []
+    if r["n_oversold"] < 2:
+        why.append(f"not oversold enough ({r['n_oversold']}/3 conditions)")
+    fail_label = {"btc": "Bitcoin below its trend", "vix": "market fear elevated", "peers": "miner peers in a downtrend"}
+    bad = [fail_label[k] for k, v in bd.items() if v is False]
+    if bad:
+        why.append("backdrop not healthy (" + ", ".join(bad) + ")")
+    conf = "Low" if missing >= 2 else "Medium"
+    return AddAdvice("WAIT", conf, "WAIT — " + "; ".join(why or ["conditions not met"]) + ".",
+                     oversold, backdrop, levels, r["n_oversold"])
 
 
 def advise(symbol: str,
@@ -260,6 +408,25 @@ def advise(symbol: str,
                   trim_pct, rotate_to,
                   {"price": price, "value": value, "gain": gain if gain is not None else float("nan"),
                    "weight": weight if weight is not None else float("nan")})
+
+
+def peer_basket(closes: pd.DataFrame, peers: List[str]) -> pd.Series:
+    """Equal-weight index (start=1) of peer stocks from daily closes; uses only
+    each day's own returns, so every value is point-in-time."""
+    cols = [p for p in peers if p in closes.columns]
+    if not cols:
+        return pd.Series(dtype=float)
+    px = closes[cols]
+    px = px[(px.index.dayofweek < 5)]
+    rets = px.pct_change(fill_method=None).mean(axis=1).fillna(0)
+    return (1 + rets).cumprod()
+
+
+def peer_vs_200(closes: pd.DataFrame, peers: List[str]) -> Optional[float]:
+    b = peer_basket(closes, peers)
+    if len(b) < 200:
+        return None
+    return float(b.iloc[-1] / b.iloc[-200:].mean() - 1)
 
 
 def years_to(target_year: int, today: Optional[date] = None) -> float:

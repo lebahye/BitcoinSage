@@ -59,6 +59,24 @@ GLOSSARY = {
         "**Why it matters to you:** as a risk-averse holder, high volatility means you should size the "
         "position so a 50% drop wouldn't force you to sell at the bottom."
     ),
+    "rsi": (
+        "RSI (Relative Strength Index)",
+        "**What it is:** a 0–100 gauge of how hard a stock has been bought or sold over the last 14 trading days. "
+        "Under 30–35 = 'oversold' (sold off hard), over 70 = 'overbought'.\n\n"
+        "**Why it matters to you:** oversold readings alone don't mean 'buy' — falling stocks can stay oversold. "
+        "The plan only says ADD when oversold lines up with a healthy Bitcoin trend, healthy peers and calm markets."
+    ),
+    "add_signal": (
+        "Good time to add? (ADD / WAIT)",
+        "**What it is:** a separate check for *buying more*, built for a cautious long-term holder. It says **ADD** only when "
+        "the stock is deeply on sale (at least 2 of: RSI under 35, 20%+ below its 200-day average, 40%+ below its 52-week high) "
+        "**and** the backdrop is healthy (Bitcoin near/above its 200-day average, VIX under 25, miner peers not in a deep "
+        "downtrend). Otherwise it says **WAIT**.\n\n"
+        "**Size cap:** it never suggests adding to a stock that's already more than 40% of your portfolio.\n\n"
+        "**Why both conditions:** 'cheap' stocks in a crypto bear market often get cheaper. Waiting for a healthy backdrop "
+        "gives up some of the bottom in exchange for fewer falling-knife buys. Check the Track Record below to see how "
+        "this rule has done in the past."
+    ),
     "sma200": (
         "200-day moving average",
         "**What it is:** the average closing price over the last 200 trading days (~10 months). "
