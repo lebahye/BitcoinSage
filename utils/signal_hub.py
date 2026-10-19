@@ -155,3 +155,21 @@ def reconcile(short_signal: Optional[str], long_action: Optional[str], symbol: s
                 "moment to carry out a trim — it is not a reason to add.")
     return (f"Short-term signal **{s}**, long-term plan **{l}** for {name}. They measure different things "
             "(days–weeks momentum vs. multi-year risk). My Plan is the one to act on.")
+
+
+@_cache15
+def _shares_cached(symbol: str) -> pd.Series:
+    import yfinance as yf
+    sh = yf.Ticker(symbol).get_shares_full(start="2019-01-01")
+    if sh is None or len(sh) == 0:
+        raise _NoData(symbol)
+    sh = sh[~sh.index.duplicated(keep="last")].sort_index()
+    return to_daily(sh)
+
+
+def get_shares(symbol: str) -> pd.Series:
+    """Shares-outstanding history (Yahoo). Empty series on failure (not cached)."""
+    try:
+        return _shares_cached(symbol)
+    except Exception:
+        return pd.Series(dtype=float)

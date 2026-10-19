@@ -53,4 +53,41 @@ SIGNAL_GLOSSARY = {
         "inside the range ('hit rate'). Close to 68% / 90% = the range is honest; much lower = it was too narrow.\n\n"
         "**What it is not:** a price target. Nobody can reliably forecast a miner's direction week to week."
     ),
+    "btc_2030": (
+        "Bitcoin 2030 scenarios — what are these?",
+        "**What it is:** four 'what-if' paths for Bitcoin's price to your plan year. Each path's yearly growth is simply "
+        "the **sum of eight drivers** (adoption, the 2028 halving, ETFs, US policy, interest rates & inflation, company "
+        "buyers, other countries, and risks). Every driver number is an **assumption you can edit**, with the dated facts "
+        "behind it listed underneath.\n\n"
+        "**What it is not:** a forecast. Nobody knows Bitcoin's 2030 price. Published forecasts (ARK, Standard Chartered, "
+        "Bernstein) are shown for comparison — they come from bullish research shops and have been cut before.\n\n"
+        "**Why it matters to you:** RIOT's value is still partly driven by Bitcoin, so your 2030 plan quietly assumes "
+        "something about Bitcoin. This makes that assumption visible."
+    ),
+    "btc_link": (
+        "BTC sensitivity (beta) and R² — how much Bitcoin moves the stock",
+        "**Beta:** if Bitcoin rises 10% over a quarter, the stock has on average moved about beta × 10%. Beta 1.1 = a bit "
+        "more than Bitcoin; beta 0.2 = barely at all.\n\n"
+        "**R²:** how much of the stock's quarterly moves Bitcoin explains (0 = none, 1 = all). About 0.47 means Bitcoin "
+        "explains roughly half; the other half is company news, dilution, AI deals, the stock market…\n\n"
+        "**Why two numbers:** over 2018–2026 RIOT followed Bitcoin closely, but in the last 3 years — after its move into "
+        "AI data centres — it barely did. Nobody knows which regime holds to 2030, so both are shown.\n\n"
+        "**Daily correlation (~0.5)** measures day-to-day co-movement; it says little about where the stock ends up in 2030."
+    ),
+    "btc_for_target": (
+        "'Bitcoin price that lines up with' a stock price",
+        "Runs the BTC→stock relationship backwards: *if history holds, what would Bitcoin need to be for the stock to reach "
+        "$X?* The range shows the BTC level needed if the stock does better (lower BTC needed) or worse (higher) than "
+        "Bitcoin alone implies — the usual 'stray' seen historically (about 2 in 3 cases fell inside).\n\n"
+        "It is **not** a promise that the stock will be $X when Bitcoin is there — dilution, mining economics and AI deals "
+        "all move it too, and you can set those below."
+    ),
+    "halving_cycle": (
+        "The 4-year halving cycle",
+        "About every 4 years the reward for mining a Bitcoin block is cut in half. In the last three cycles Bitcoin's peak "
+        "came **about 17–18 months after the halving**, followed by a fall of roughly 50–85% over the next year.\n\n"
+        "**Why it matters to a 2030 seller:** the next halving is estimated for ~April 2028. If the pattern repeated, the peak "
+        "would be around **late 2029** and **2030 would be a down year**. Three cycles is a tiny sample and many analysts "
+        "think ETFs are changing the pattern — so treat it as a reason to start staged selling earlier, not as a rule."
+    ),
 }

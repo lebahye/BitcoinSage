@@ -258,7 +258,15 @@ class HoldingPlan:
         self._render_track_record(symbol)
 
         # ── Path to 2030 ─────────────────────────────────────────────────
-        self._render_path(symbol, closes, positions, targets, adv)
+        plan_year, plan_cagr = self._render_path(symbol, closes, positions, targets, adv)
+
+        # ── Bitcoin to 2030 (scenarios, BTC↔stock link, cycle, watchlist, milestones) ──
+        try:
+            from components import btc_2030
+            from utils.holding_advisor import years_to as _yt
+            btc_2030.render(symbol, closes, targets, plan_year, _yt(plan_year), plan_cagr, height)
+        except Exception as e:  # never let this panel break My Plan
+            st.warning(f"₿ Bitcoin-to-{plan_year} panel unavailable right now ({type(e).__name__}) — N/A.")
 
         # ── All holdings at a glance ─────────────────────────────────────
         self._render_all_holdings(closes, positions, targets)
@@ -330,7 +338,8 @@ class HoldingPlan:
         st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
         st.caption("Bear/Base/Bull are **assumptions you can edit**, not predictions. The 'typical range' uses only "
                    f"{symbol}'s own last-year volatility (about 2 in 3 outcomes historically fall inside it) — "
-                   "it shows how wide the possibilities are, not which way the price will go.")
+                   "it shows how wide the possibilities are, not which way the price will go. "
+                   "The ₿ Bitcoin section below shows the Bitcoin price each of these cases quietly assumes.")
 
         with st.expander("📅 A simple, low-stress 2030 exit framework (education, not advice)"):
             st.markdown(f"""
@@ -343,6 +352,7 @@ class HoldingPlan:
 - **Know your re-check triggers** (listed above under "What would change my mind") and look again after each earnings report.
 - **Taxes:** shares held over a year usually qualify for lower long-term capital-gains rates in the US. Check with a tax adviser before large sales.
 """)
+        return year, {"Bear": bear, "Base": base, "Bull": bull}
 
     # ------------------------------------------------------------------
     def _render_change_banner(self, symbol, adv, add):
