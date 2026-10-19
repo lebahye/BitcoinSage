@@ -43,3 +43,16 @@ Streamlit `AppTest` against live Yahoo Finance data and records uncaught excepti
   If unavailable, shows "n/a" and the composite re-weights the other factors.
 - Smoke result: 0 exceptions. Now live: Beta to Bitcoin 1.10 (was fake 1.50), BTC Correlation 45–65/100 per stock (was 50 for all),
   Miner Beta 1.10× (was 1.00×), Coupling 0.53, Coupling tab no longer errors. RIOT 1y corr to BTC = 0.49 (matches the separate RIOT analysis). ✅
+
+### Step 2 — Fix crashing tabs and hardcoded RIOT position
+- `components/personal_portfolio.py`: export `DEFAULT_POSITIONS` alias → Backtesting "Options Strategy" tab no longer crashes.
+- `components/riot_protection.py`: `self.config` was never defined (crashed the Income Scenarios tab). Shares/cost basis are now
+  read from the Portfolio tab's saved positions every render (no more hardcoded 10,975 / $18.22 / "109 contracts" in ~15 places).
+  The hardcoded "Total Investment $199,755" was also wrong arithmetic (10,975 × $18.22 = $199,964).
+- Replaced the stale hardcoded expiration advice ("Use 31 OCT 25 (39 days)", "26 SEP / 3 OCT / 10 OCT" — dates from 2025) with the
+  live listed expiry closest to 30–45 days; the covered-call/collar tables now load that expiry's chain (previously they used the
+  nearest weekly while telling the user to use a 30–45 day option). Broker instructions show the user's real contract count
+  (was "100 contracts"). Removed the unsupported "$2,000–$5,000+ monthly income" claim.
+- `components/reflexivity_dashboard.py`: blockchain.info returns `[{"x":..,"y":..}]` but the parser expected pairs → hashrate and
+  difficulty were *always* empty. Fixed; estimated breakeven (labelled as an estimate with its assumptions) now shows ≈ $76,000.
+- Smoke result: 0 exceptions, **0 error boxes** (baseline had 3). ✅

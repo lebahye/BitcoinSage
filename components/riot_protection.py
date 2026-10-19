@@ -11,11 +11,50 @@ class RIOTProtection:
     """Dedicated RIOT share protection strategies with real-time options data"""
     
     def __init__(self):
-        self.user_position = {
-            'shares': 10975,
-            'cost_basis': 18.22,
-            'total_investment': 199755
-        }
+        self.user_position = self._load_riot_position()
+        self.config = self.user_position
+        self.expiration = None
+
+    @staticmethod
+    def _load_riot_position() -> dict:
+        """RIOT shares/cost basis from the editable Portfolio tab (data/positions.json),
+        falling back to the Portfolio tab's defaults.  Never hardcoded here."""
+        try:
+            from components.personal_portfolio import PersonalPortfolio
+            pos = PersonalPortfolio._load_positions().get('RIOT', {})
+        except Exception:
+            pos = {}
+        shares = int(pos.get('shares', 0) or 0)
+        cb = float(pos.get('cost_basis', 0.0) or 0.0)
+        return {'shares': shares, 'cost_basis': cb, 'total_investment': shares * cb,
+                'contracts': shares // 100}
+
+    def _exp_label(self) -> str:
+        """Human label for the chosen 30-45 DTE expiry, e.g. '20 Nov 2026 (32 days)'."""
+        if not self.expiration:
+            return "the listed expiry closest to 30-45 days out"
+        d = datetime.strptime(self.expiration, "%Y-%m-%d")
+        return f"{d.strftime('%d %b %Y')} ({(d.date() - datetime.now().date()).days} days)"
+
+    @staticmethod
+    def _pick_expiration(symbol='RIOT'):
+        """Choose the listed expiration closest to 38 days out (30-45 DTE sweet spot).
+        Returns (expiration_str, days_to_expiry, calls_df, puts_df) or (None, None, None, None)."""
+        import yfinance as yf
+        try:
+            t = yf.Ticker(symbol)
+            exps = list(t.options or [])
+            if not exps:
+                return None, None, None, None
+            today = datetime.now().date()
+            dte = [(e, (datetime.strptime(e, "%Y-%m-%d").date() - today).days) for e in exps]
+            in_window = [x for x in dte if 30 <= x[1] <= 45]
+            pool = in_window or [x for x in dte if x[1] >= 21] or dte
+            exp, days = min(pool, key=lambda x: abs(x[1] - 38))
+            chain = t.option_chain(exp)
+            return exp, days, chain.calls, chain.puts
+        except Exception:
+            return None, None, None, None
     
     def render(self, data_fetcher, options_analyzer):
         """Render RIOT protection strategies interface"""
@@ -23,22 +62,33 @@ class RIOTProtection:
         data_lineage_panel(["<strong>Direct:</strong> RIOT price and options chain via Yahoo Finance", "<strong>Freshness risk:</strong> option quotes may be stale outside market hours", "<strong>Estimated:</strong> annualized income and scenario summaries", "<strong>Execution note:</strong> use bid/ask and liquidity before placing trades"], title="RIOT Protection Data Quality")
         freshness_note("RIOT options quotes fetched at render time", "weekends/after-hours can show stale last-trade premiums")
         market_hours_note("options")
-        st.markdown("### Protecting Your 10,975 RIOT Shares WITHOUT CASH - Generate Income!")
+        # Re-read the position every render so edits in the Portfolio tab show up here
+        self.user_position = self._load_riot_position()
+        self.config = self.user_position
+        shares = self.user_position['shares']
+        cb = self.user_position['cost_basis']
+        if shares <= 0:
+            st.warning("No RIOT position found. Add your RIOT shares and cost basis in "
+                       "🏆 Portfolio → Your Portfolio → Edit Positions.")
+            return
+        st.markdown(f"### Protecting Your {shares:,} RIOT Shares WITHOUT CASH - Generate Income!")
+        st.caption("Shares and cost basis come from your Portfolio tab (edit them there).")
         
         # Get real-time RIOT data FIRST
         riot_data = data_fetcher.get_stock_data(['RIOT'], period='1D')
         current_price = riot_data['RIOT'].iloc[-1] if not riot_data.empty else 0
         
-        # Quick expiration date guidance - CRITICAL!
-        st.success("""
-        📅 **QUICK ANSWER: Which Expiration Date?**
-        
-        **Use 31 OCT 25 (39 days)** for all your strategies - this is the sweet spot!
-        
-        ✅ **Perfect timeframe:** 30-45 days gives you optimal premium collection  
-        ❌ **Avoid weeklies:** 26 SEP, 3 OCT, 10 OCT expire too fast  
-        ⚠️ **Longer-term:** 21 NOV 25 (60 days) acceptable if better liquidity
-        """)
+        # Expiration guidance computed from the live chain (was a stale hardcoded date)
+        exp, dte, calls_30_45, puts_30_45 = self._pick_expiration('RIOT')
+        self.expiration = exp
+        if exp:
+            st.success(
+                f"📅 **Which expiration date?** The listed expiry closest to the 30–45 day sweet spot is "
+                f"**{datetime.strptime(exp, '%Y-%m-%d').strftime('%d %b %Y')} ({dte} days)**. "
+                "Shorter weeklies decay fast and are riskier; much longer dates tie you up."
+            )
+        else:
+            st.warning("Couldn't load RIOT option expirations right now — try refreshing.")
         
         # Add Start Here wizard
         with st.expander("🚀 START HERE - Beginner's Guide", expanded=False):
@@ -50,8 +100,8 @@ class RIOTProtection:
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.metric("Your Position", "10,975 shares")
-            st.metric("Cost Basis", "$18.22")
+            st.metric("Your Position", f"{shares:,} shares")
+            st.metric("Cost Basis", f"${cb:.2f}", help="Average price paid per share (from your Portfolio tab).")
         
         with col2:
             st.metric("Current Price", f"${current_price:.2f}")
@@ -60,14 +110,17 @@ class RIOTProtection:
                      delta=f"{((current_price - self.user_position['cost_basis']) / self.user_position['cost_basis'] * 100):.1f}%")
         
         with col3:
-            st.metric("Total Investment", f"${self.user_position['total_investment']:,}")
+            st.metric("Total Investment", f"${self.user_position['total_investment']:,.0f}")
             current_value = current_price * self.user_position['shares']
             st.metric("Current Value", f"${current_value:,.0f}")
         
         st.divider()
         
-        # Get real-time options data
-        calls_df, puts_df = data_fetcher.get_options_data('RIOT')
+        # Options chain for the 30-45 DTE expiry (fallback: nearest expiry)
+        if calls_30_45 is not None and puts_30_45 is not None:
+            calls_df, puts_df = calls_30_45, puts_30_45
+        else:
+            calls_df, puts_df = data_fetcher.get_options_data('RIOT')
         
         if calls_df is not None and puts_df is not None and not puts_df.empty:
             # Protection strategy tabs - NO CASH REQUIRED
@@ -103,15 +156,16 @@ class RIOTProtection:
         with col1:
             st.markdown(f"""
             **✅ What You Own:**
-            - **10,975 RIOT shares** 
-            - **Paid:** $18.22 per share
-            - **Total Investment:** $199,755
-            - **Current Value:** ${current_price * 10975:,.0f}
+            - **{self.user_position['shares']:,} RIOT shares**
+            - **Paid:** ${self.user_position['cost_basis']:.2f} per share
+            - **Total Investment:** ${self.user_position['total_investment']:,.0f}
+            - **Current Value:** ${current_price * self.user_position['shares']:,.0f}
             """)
         
         with col2:
-            pnl = (current_price - 18.22) * 10975
-            pnl_pct = ((current_price - 18.22) / 18.22) * 100
+            _cb = self.user_position['cost_basis'] or 1e-9
+            pnl = (current_price - _cb) * self.user_position['shares']
+            pnl_pct = ((current_price - _cb) / _cb) * 100
             st.markdown(f"""
             **📊 Current Status:**
             - **Current Price:** ${current_price:.2f}
@@ -204,12 +258,13 @@ class RIOTProtection:
         # Step 4: Execution Guide
         st.markdown("### 🚀 Step 4: How to Execute (Broker Instructions)")
         
-        st.warning("""
-        **⚠️ Important:** Always paper trade first if you're new to options! 
-        
-        **For Your 10,975 Shares, You Need:**
-        - **109 contracts** for any strategy (each contract = 100 shares)
-        - **Example:** To sell covered calls on all shares = "Sell to Open 109 contracts"
+        _sh = self.user_position['shares']; _ct = _sh // 100
+        st.warning(f"""
+        **⚠️ Important:** Always paper trade first if you're new to options!
+
+        **For Your {_sh:,} Shares, You Need:**
+        - **{_ct} contracts** for any strategy (each contract = 100 shares)
+        - **Example:** To sell covered calls on all shares = "Sell to Open {_ct} contracts"
         """)
         
         exec_col1, exec_col2 = st.columns(2)
@@ -225,20 +280,19 @@ class RIOTProtection:
             """)
         
         with exec_col2:
-            st.markdown("""
+            st.markdown(f"""
             **🔍 What to Look For:**
             - **Volume > 100:** Ensures you can trade easily
             - **Tight Bid-Ask Spread:** Better pricing
-            - **30-45 Days to Expiry:** Sweet spot for premiums (**31 OCT 25 = Perfect!**)
+            - **30-45 Days to Expiry:** Sweet spot for premiums (right now: **{self._exp_label()}**)
             - **Strike 5-15% Above Current:** Good risk/reward
-            
-            **📅 EXPIRATION DATE CHEAT SHEET:**
-            - **26 SEP 25 (4 days):** ❌ TOO SHORT - Weekly trap!
-            - **3 OCT 25 (11 days):** ❌ TOO SHORT - High assignment risk
-            - **10 OCT 25 (18 days):** ⚠️ SHORT - Risky but possible
-            - **31 OCT 25 (39 days):** ✅ PERFECT - Sweet spot!
-            - **21 NOV 25 (60 days):** ⚠️ LONG - Less flexible
-            - **19 DEC 25 (88 days):** ❌ TOO LONG - Avoid
+
+            **📅 EXPIRATION RULE OF THUMB:**
+            - **Under 14 days:** ❌ too short — weekly trap, high assignment risk
+            - **14–29 days:** ⚠️ short — possible but riskier
+            - **30–45 days:** ✅ sweet spot
+            - **46–75 days:** ⚠️ long — less flexible
+            - **75+ days:** ❌ ties up your shares too long
             """)
         
         st.info("""
@@ -255,19 +309,19 @@ class RIOTProtection:
     def _render_covered_calls(self, calls_df, current_price):
         """Render covered calls strategy - NO CASH REQUIRED"""
         st.subheader("💰 Covered Call Strategy - GENERATE INCOME!")
-        st.markdown("""
+        st.markdown(f"""
         **Strategy:** Sell call options against your existing shares to generate immediate income.
-        
+
         **🗓️ WHICH EXPIRATION DATE TO CHOOSE:**
-        
+
         **✅ RECOMMENDED: 30-45 Days to Expiration**
-        - **From your screenshots:** Choose **31 OCT 25 (39 days)** options
+        - **Right now:** **{self._exp_label()}**
         - **Why this timeframe:** Sweet spot for premium collection vs. time risk
         - **Avoid:** Weekly options (too risky, expire too fast)
         - **Avoid:** 60+ day options (too long, less flexibility)
         
         **How it works - NO CASH NEEDED:**
-        - Keep all 10,975 RIOT shares
+        - Keep all your RIOT shares
         - **SELL call options** with 30-45 day expiration (you receive premium immediately)
         - Generate monthly income while holding shares
         - If RIOT stays below strike, keep premium + shares
@@ -286,13 +340,11 @@ class RIOTProtection:
         
         # Add expiration guidance
         if not relevant_calls.empty:
-            st.info("""
+            st.info(f"""
             🎯 **EXPIRATION DATE SELECTION:**
-            
-            **Choose options expiring in 30-45 days** for optimal risk/reward:
-            - **Best Choice:** 31 OCT 25 (39 days) - Perfect timeframe!
-            - **Alternative:** 21 NOV 25 (60 days) - Acceptable but longer commitment
-            - **Avoid:** Weekly options (26 SEP, 3 OCT, 10 OCT) - Too risky!
+
+            **Choose options expiring in 30-45 days** for optimal risk/reward.
+            Prices below are for the **{self.expiration or 'nearest listed'}** expiry.
             
             **Why 30-45 days?**
             - Maximum time decay efficiency
@@ -306,10 +358,10 @@ class RIOTProtection:
             
             # Calculate income potential and upside caps
             relevant_calls['upside_cap'] = ((relevant_calls['strike'] / current_price) - 1) * 100
-            relevant_calls['total_income'] = relevant_calls['lastPrice'] * 10975  # Income for all 10,975 shares (109 contracts)
+            relevant_calls['total_income'] = relevant_calls['lastPrice'] * (self.user_position['contracts'] * 100)  # per full contract only
             relevant_calls['income_per_share'] = relevant_calls['lastPrice']
             relevant_calls['monthly_yield'] = (relevant_calls['income_per_share'] / current_price) * 100
-            relevant_calls['contracts_needed'] = 109  # 109 contracts for 10,975 shares
+            relevant_calls['contracts_needed'] = self.user_position['contracts']
             
             # Display top recommendations
             display_calls = relevant_calls.sort_values('volume', ascending=False).head(5)
@@ -348,8 +400,8 @@ class RIOTProtection:
                     
                     **📝 Broker Instructions:**
                     1. **Action:** Sell to Open
-                    2. **Quantity:** 100 contracts
-                    3. **Option:** RIOT 31 OCT 25 ${call['strike']} CALL (39 days to expiration)
+                    2. **Quantity:** {self.user_position['contracts']} contracts (all your shares; start smaller if new)
+                    3. **Option:** RIOT {self._exp_label()} ${call['strike']} CALL
                     4. **Order Type:** Limit at ${call['lastPrice']:.2f} or better
                     5. **Duration:** Day order (can change to GTC if needed)
                     
@@ -365,14 +417,14 @@ class RIOTProtection:
     def _render_zero_cost_collars(self, calls_df, puts_df, current_price):
         """Render zero-cost collar strategy"""
         st.subheader("🎯 Zero-Cost Collar Strategy")
-        st.markdown("""
+        st.markdown(f"""
         **Strategy:** ZERO-COST protection by balancing call sales with put purchases.
-        
-        **🗓️ RECOMMENDED EXPIRATION: 31 OCT 25 (39 days)**
-        
+
+        **🗓️ RECOMMENDED EXPIRATION: {self._exp_label()}**
+
         **How it works - NO CASH REQUIRED:**
-        - **SELL call options** (receive premium) - Use 31 OCT 25 expiration
-        - **BUY put options** (downside protection) - Use 31 OCT 25 expiration  
+        - **SELL call options** (receive premium) - same expiration
+        - **BUY put options** (downside protection) - same expiration
         - Premium received = Premium paid = **ZERO NET COST**
         - Sometimes even generates net income!
         - Perfect collar protection without spending cash
@@ -410,11 +462,11 @@ class RIOTProtection:
                             'put_premium': put['lastPrice'],
                             'call_premium': call['lastPrice'],
                             'net_cost': net_cost,
-                            'total_cost': net_cost * self.user_position['shares'],  # Cost for 10,975 shares
+                            'total_cost': net_cost * self.user_position['shares'],
                             'protection_level': ((put['strike'] / current_price) - 1) * 100,
                             'upside_cap': ((call['strike'] / current_price) - 1) * 100,
-                            'call_expiration': '31 OCT 25',
-                            'put_expiration': '31 OCT 25'
+                            'call_expiration': self.expiration or 'nearest',
+                            'put_expiration': self.expiration or 'nearest'
                         })
                 
                 # Sort by best risk/reward
@@ -625,7 +677,7 @@ class RIOTProtection:
             """)
         
         st.info("""
-        **💡 For your specific situation:** With 10,975 shares and NO CASH, start with covered calls to generate 
+        **💡 For your specific situation:** With your RIOT shares and NO CASH, start with covered calls to generate 
         income, then use zero-cost collars for protection. This approach maximizes your returns while protecting downside.
         """)
     
@@ -637,7 +689,7 @@ class RIOTProtection:
         """)
         
         st.markdown("### 💰 1. Covered Call Income Generation")
-        st.success("Start here: Generate $2,000-$5,000+ monthly income from your shares")
+        st.success("Start here: see the 💰 Covered Calls tab for live premiums on your shares")
         
         st.markdown("### 🛡️ 2. Zero-Cost Collar Protection")
         st.info("Use covered call income to fund protective puts, or find zero-cost combinations")

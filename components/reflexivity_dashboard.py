@@ -64,7 +64,13 @@ def _fetch_blockchain_chart(chart: str, timespan: str = "1year") -> pd.DataFrame
         values = resp.json().get("values", [])
         if not values:
             return pd.DataFrame()
-        df = pd.DataFrame(values, columns=["timestamp", "value"])
+        # blockchain.info returns [{"x": unix_ts, "y": value}, ...]
+        if isinstance(values[0], dict):
+            df = pd.DataFrame({"timestamp": [v.get("x") for v in values],
+                               "value": [v.get("y") for v in values]})
+        else:
+            df = pd.DataFrame(values, columns=["timestamp", "value"])
+        df = df.dropna()
         df["date"] = pd.to_datetime(df["timestamp"], unit="s")
         df.set_index("date", inplace=True)
         df.drop(columns=["timestamp"], inplace=True)

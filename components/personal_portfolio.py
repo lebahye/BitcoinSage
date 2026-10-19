@@ -27,6 +27,10 @@ _DEFAULT_POSITIONS = {
     'WULF': {'shares': 500,   'name': 'TeraWulf Inc',             'cost_basis': 2.90},
 }
 
+# Public alias (other components import this name)
+DEFAULT_POSITIONS = _DEFAULT_POSITIONS
+
+
 class PersonalPortfolio:
     """Personalized portfolio management for user's actual mining stock positions"""
     
