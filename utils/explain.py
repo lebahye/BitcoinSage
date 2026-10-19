@@ -102,6 +102,21 @@ GLOSSARY = {
         "**Tip for a long-term holder:** avoid making big buy/sell decisions on the day before these events; let the "
         "news land, then re-check."
     ),
+    "track_record": (
+        "How to read the track record (and its limits)",
+        "**What it is:** the dashboard pretends it's each day of the last 5 years, looks only at prices known on that day, "
+        "and writes down what My Plan would have said. Then it checks what RIOT actually did 1, 3, 6 and 12 months later, "
+        "and compares that with buying on *any* random day.\n\n"
+        "**Honest limits:**\n"
+        "- Only a handful of signals (often under 10). A few lucky or unlucky trades swing the numbers a lot.\n"
+        "- Only the market rules can be replayed. Your personal rules (position size, your target, cost basis) and "
+        "analyst targets aren't in it.\n"
+        "- Miner stocks swing wildly, so a signal can be 'right' at 1 month and 'wrong' at 12.\n"
+        "- The peer group is today's list of miners, which slightly flatters the past.\n"
+        "- Past results don't predict future ones.\n\n"
+        "**How to use it:** if a signal hasn't clearly beaten 'any day', treat it as a prompt to look closer rather than a "
+        "trading instruction. For a 2030 holder the position-size rule usually matters more than timing."
+    ),
     "sma200": (
         "200-day moving average",
         "**What it is:** the average closing price over the last 200 trading days (~10 months). "

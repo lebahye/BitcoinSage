@@ -76,6 +76,27 @@ def load_events(symbol: str):
     return today, build_calendar(today, earn, height), bool(earn), height
 
 
+@st.cache_data(ttl=24 * 3600, show_spinner=False)
+def _backtest_cached(symbol: str, years: int) -> dict:
+    from utils.market_data import fetch_daily_closes
+    from utils.signal_backtest import run_backtest
+    syms = tuple(dict.fromkeys((symbol, "BTC-USD", "^VIX") + tuple(WATCHLIST)))
+    closes = fetch_daily_closes(syms, period="10y")
+    if closes.empty or symbol not in closes.columns or "BTC-USD" not in closes.columns:
+        raise _NoData()
+    r = run_backtest(closes, symbol, [w for w in WATCHLIST if w != symbol], years=years)
+    if not r:
+        raise _NoData()
+    return r
+
+
+def load_backtest(symbol: str, years: int = 5):
+    try:
+        return _backtest_cached(symbol, years)
+    except Exception:
+        return None
+
+
 def _analyst_targets(symbol: str) -> dict:
     try:
         return _analyst_targets_cached(symbol)
@@ -180,6 +201,16 @@ class HoldingPlan:
             f'<div style="font-size:1.05rem;color:#eee">{adv.headline}</div></div>',
             unsafe_allow_html=True)
         explain("recommendation")
+        _bt = load_backtest(symbol)
+        if _bt:
+            _sm, _b = _bt["summary"], _bt["baseline"]["6M"]
+            _beat = [n.split(" ")[0] for n, v in _sm.items() if v["6M"]["n"] and
+                     ((v["6M"]["avg"] > _b["avg"]) if n.startswith("ADD") else (v["6M"]["avg"] < _b["avg"]))]
+            st.caption("📊 Track record (last 5 yrs): " + (
+                "none of the timing signals beat simply holding — treat SELL/ADD timing as a prompt to look closer, "
+                "not an instruction; the position-size rule matters more." if not _beat else
+                f"{', '.join(_beat)} signals did better than a random day, on small samples.")
+                + " Details in 📊 Track record below.")
 
         f = adv.facts
         c1, c2, c3, c4 = st.columns(4)
@@ -218,6 +249,8 @@ class HoldingPlan:
         for line in adv.change_my_mind:
             st.markdown(f"- {line}")
         st.caption("Re-check after each quarterly earnings report and whenever one of these levels is crossed.")
+
+        self._render_track_record(symbol)
 
         # ── Path to 2030 ─────────────────────────────────────────────────
         self._render_path(symbol, closes, positions, targets, adv)
@@ -388,6 +421,58 @@ class HoldingPlan:
                    f"{SCHEDULES_LAST_VERIFIED:%b %d, %Y}. Showing the next 120 days plus the halving."
                    + (" Note: " + "; ".join(notes) + "." if notes else ""))
         explain("event_calendar")
+
+    # ------------------------------------------------------------------
+    def _render_track_record(self, symbol):
+        from utils.signal_backtest import HORIZONS, verdict, trust_label
+        st.subheader("📊 Track record — how much to trust these signals")
+        with st.spinner("Replaying the rules on 5 years of history…"):
+            r = load_backtest(symbol)
+        if not r:
+            st.caption("Track record unavailable right now (not enough history from Yahoo Finance). Try again later.")
+            return
+        st.caption(f"The same ADD and sell-side rules replayed day by day on {symbol} from {r['start']:%b %Y} to "
+                   f"{r['end']:%b %d, %Y} ({r['days']:,} trading days), using only data available on each day.")
+        for name in r["summary"]:
+            st.markdown("- " + verdict(name, r["summary"][name], r["baseline"]))
+        rows = []
+        for name, sm in r["summary"].items():
+            row = {"Signal": name, "Signals": sm["1M"]["n"]}
+            for k in HORIZONS:
+                v = sm[k]
+                row[f"{k} avg"] = "n/a" if not v["n"] else f"{v['avg']:+.0%}"
+                row[f"{k} hit"] = "n/a" if not v["n"] else f"{v['hit']:.0%}"
+            rows.append(row)
+        b = r["baseline"]
+        rows.append({"Signal": "Any day (just holding)", "Signals": b["1M"]["n"],
+                     **{f"{k} avg": f"{b[k]['avg']:+.0%}" for k in HORIZONS},
+                     **{f"{k} hit": f"{b[k]['up']:.0%} up" for k in HORIZONS}})
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        st.caption("avg = average return from the next day's close. hit = how often the signal was 'right': for ADD the "
+                   "price was higher later; for SELL/Caution the price was lower later.")
+        stg = r.get("strategy") or {}
+        if stg:
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Just hold (5 yrs)", f"{stg['hold_total']:+.0%}", help=f"Worst drop along the way {stg['hold_mdd']:.0%}.")
+            c2.metric("Follow the rules", f"{stg['strategy_total']:+.0%}",
+                      f"{stg['strategy_total'] - stg['hold_total']:+.0%} vs hold",
+                      help="Sell the day after a SELL signal; buy back the day after an ADD or once risk points fall to 2 "
+                           f"or less. Worst drop {stg['strategy_mdd']:.0%}; invested {stg['time_invested']:.0%} of days; "
+                           f"{stg['switches']} switches. No trading costs or taxes included.")
+            c3.metric("Days in each state", f"ADD {r['days_in_state']['ADD']} · SELL {r['days_in_state']['SELL']}",
+                      help="Trading days the condition was on. Many in-a-row days count as one signal above.")
+            st.line_chart(stg["equity"], height=220)
+        with st.expander(f"📜 Every past signal ({len(r['signals'])})"):
+            if len(r["signals"]):
+                df = r["signals"].copy()
+                for k in HORIZONS:
+                    df[k] = df[k].map(lambda x: "pending" if pd.isna(x) else f"{x:+.0%}")
+                df["Price next close"] = df["Price next close"].map(lambda x: f"${x:,.2f}")
+                df["RSI"] = df["RSI"].map(lambda x: f"{x:.0f}")
+                st.dataframe(df, hide_index=True, use_container_width=True)
+                st.download_button("⬇️ Download signals (CSV)", r["signals"].to_csv(index=False),
+                                   f"{symbol}_signal_track_record.csv", "text/csv", key=f"bt_dl_{symbol}")
+        explain("track_record")
 
     # ------------------------------------------------------------------
     def _render_add(self, a):

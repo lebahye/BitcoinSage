@@ -190,3 +190,21 @@ Note: the smoke "error boxes" count per section (Risk Center 6, Polymarket 18, �
 - Live today: FOMC Oct 28 (9d), RIOT earnings Oct 29 (10d, est.), CIFR Nov 2 (14d) flagged; CPI Nov 10; halving est.
   Apr 11 2028 (height 972,201, 77,799 blocks to go).
 - Tests: 29 pass (3 new: halving math, schedule sanity, 14-day flagging). Headless ok; smoke 0 exceptions / 0 failure boxes.
+
+## V2 Step 4 — Signal track record (backtest)
+- New `utils/signal_backtest.py`: replays the market rules day by day on 10y of Yahoo daily closes, evaluating the last
+  5 years for RIOT. Uses the *same* functions as the live call (`add_rule`, `market_risk_score`, `rsi_series`).
+  No-lookahead safeguards: rolling/EWM indicators only; Bitcoin lagged one day (Yahoo's BTC bar closes ~4h after the
+  US close); entries at the NEXT day's close; signals collapsed into episodes (20-day cooldown; a state already on at the
+  window start is not counted). A test proves features on past days are identical with or without later data.
+- Shows ADD, SELL (≥5 risk pts) and Caution (≥3) signals with 1/3/6/12-month forward returns, hit rates, an "any day
+  (just holding)" baseline, a simple follow-the-rules vs hold equity curve, every past signal (CSV download), sample-size
+  trust labels and a glossary entry on limits. Cached 24h; failures not cached. One-line summary under the verdict card.
+- **Result today (honest):** ADD 5 signals, 6M avg −8% vs +18% any day; SELL 8 signals, 6M avg +33% (selling would have
+  hurt); Caution 7 signals, +48%. Follow-the-rules −70% vs hold −55% (no costs). All samples small → trust "low".
+  The market-timing rules have **no demonstrated edge** on RIOT; the dashboard now says so.
+- Not replayable: concentration/target/cost-basis rules, analyst targets, the 40% size cap. Peers = today's WATCHLIST
+  (mild survivorship bias).
+- Tests: 32 pass (3 new: no-lookahead, episodes/forward-return timing, end-to-end shapes). Headless ok; smoke 0
+  exceptions / 0 failure boxes (one intermediate run hit Yahoo "Too Many Requests" in Options/Flow after ~10 back-to-back
+  sweeps; re-run after a pause was clean).
