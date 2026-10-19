@@ -85,3 +85,15 @@ The application is designed to be self-contained with minimal external service d
 - `utils/explain.py` — plain-English glossary for tooltips and "What is this?" boxes.
 - Top-level navigation is a section selector (only the chosen section runs) to stay under Yahoo's rate limits.
 - `FIXLOG.md` lists every change and test result. Run `pytest tests/` after changes.
+
+## Optional call-change alerts (off by default)
+My Plan saves the latest call per ticker in `data/last_calls.json` (gitignored) and shows a
+"🔔 What changed since last check" banner when it flips. To also get a Telegram or email message:
+1. In Replit open **Tools → Secrets** and add
+   - Telegram: `TELEGRAM_BOT_TOKEN` (create a bot with @BotFather), `TELEGRAM_CHAT_ID` (message the bot, then read your id from
+     `https://api.telegram.org/bot<token>/getUpdates`), and/or
+   - Email: `SMTP_HOST`, `SMTP_PORT` (587 STARTTLS or 465 SSL), `SMTP_USER`, `SMTP_PASSWORD` (use an app password),
+     `ALERT_EMAIL_TO`, optional `SMTP_FROM`.
+2. In My Plan → **🔔 Alert settings**, tick "Send me an alert when a call changes" (saved in `data/notify_settings.json`).
+Alerts are sent only while the dashboard is open and a change is detected; nothing is sent when
+`BITCOINSAGE_NO_NOTIFY` or `PYTEST_CURRENT_TEST` is set. Secret values are never displayed or logged.

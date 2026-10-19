@@ -162,3 +162,18 @@ Note: the smoke "error boxes" count per section (Risk Center 6, Polymarket 18, �
 - `components/holding_plan.py`: new "➕ Good time to add more?" block inside My Plan; glossary entries `rsi`, `add_signal`.
 - Live today: RIOT = WAIT (High) — 80% of portfolio > 40% cap; also peer basket −41% vs its 200-day.
 - Tests: 24 pass (6 new). Headless: ok. Smoke: 0 exceptions, 0 failure boxes; My Plan shows the new block.
+
+## V2 Step 2 — Alerts when the call changes
+- New `utils/call_tracker.py`: saves the latest call per ticker (HOLD/TRIM/SELL/ROTATE + ADD/WAIT, confidence, price,
+  every check's status) to `data/last_calls.json` (data/ is already gitignored). A flip is stored as a pending change
+  (old vs new + which checks flipped) and keeps showing until "Got it"; last 50 changes kept as history.
+- New `utils/notifier.py`: optional Telegram (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`) and SMTP email. OFF by default;
+  sends only if enabled in My Plan → 🔔 Alert settings AND secrets are set AND not under test
+  (`PYTEST_CURRENT_TEST`/`BITCOINSAGE_NO_NOTIFY`). Errors report only the exception type (Telegram URLs contain the token).
+  Each change is sent at most once.
+- My Plan: orange "🔔 What changed since last check" banner at the top; settings + history expander; glossary `call_alerts`;
+  Replit Secrets how-to in replit.md.
+- Tests: 26 pass (2 new: change detection/persistence/ack; notifier off-by-default and blocked under pytest).
+  Headless ok; smoke 0 exceptions / 0 failure boxes (run with BITCOINSAGE_NO_NOTIFY=1). Manual AppTest: seeded an older
+  HOLD call → banner showed "HOLD → TRIM, Concentration warn → bad"; "Got it" cleared it. No message was sent at any point
+  (no secrets configured on the box, alerts disabled). Test state file removed afterwards.

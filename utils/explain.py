@@ -77,6 +77,18 @@ GLOSSARY = {
         "gives up some of the bottom in exchange for fewer falling-knife buys. Check the Track Record below to see how "
         "this rule has done in the past."
     ),
+    "call_alerts": (
+        "How do call-change alerts work?",
+        "**What it is:** each time you open My Plan, the dashboard saves today's call (HOLD/TRIM/SELL/ROTATE and ADD/WAIT) "
+        "in `data/last_calls.json` on your Replit. If the next check gives a different call, an orange **What changed** "
+        "banner shows the old vs new call and which checks flipped, until you click *Got it*.\n\n"
+        "**Phone/email alerts (optional, off by default):** in Replit open **Tools → Secrets** and add either\n"
+        "- Telegram: `TELEGRAM_BOT_TOKEN` (from @BotFather) and `TELEGRAM_CHAT_ID` (your chat id), or\n"
+        "- Email: `SMTP_HOST`, `SMTP_PORT` (587, or 465 for SSL), `SMTP_USER`, `SMTP_PASSWORD` (an app password), "
+        "`ALERT_EMAIL_TO`, optional `SMTP_FROM`.\n\n"
+        "Then tick *Send me an alert when a call changes* below. An alert is only sent when a change is detected "
+        "while the dashboard is open — it doesn't run in the background."
+    ),
     "sma200": (
         "200-day moving average",
         "**What it is:** the average closing price over the last 200 trading days (~10 months). "

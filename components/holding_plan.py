@@ -126,6 +126,8 @@ class HoldingPlan:
             st.error(f"⚠️ No price data for {symbol} from Yahoo Finance right now — no recommendation shown. "
                      "Try 🔄 Refresh Data in a minute.")
             return
+        add = get_add_advice(symbol, closes, positions)
+        self._render_change_banner(symbol, adv, add)
 
         # ── Verdict card ─────────────────────────────────────────────────
         color, icon = _ACTION_STYLE[adv.action]
@@ -159,7 +161,7 @@ class HoldingPlan:
                 st.markdown(f"**{title}**  \n{body}")
                 st.markdown("---")
 
-        self._render_add(symbol, closes, positions)
+        self._render_add(add)
 
         st.subheader("🔁 What would change my mind")
         for line in adv.change_my_mind:
@@ -254,9 +256,69 @@ class HoldingPlan:
 """)
 
     # ------------------------------------------------------------------
-    def _render_add(self, symbol, closes, positions):
+    def _render_change_banner(self, symbol, adv, add):
+        """Persist this call; show a banner if it differs from the last check (until acknowledged)."""
+        from utils import call_tracker, notifier
+        try:
+            change = call_tracker.record(symbol, call_tracker.snapshot(adv, add))
+        except Exception as e:
+            st.caption(f"(Couldn't save the call history: {type(e).__name__})")
+            return
+        pend = call_tracker.pending(symbol)
+        if change and not change.get("notified"):
+            result = notifier.notify(f"BitcoinSage: {symbol} call changed", call_tracker.format_change(change))
+            if result:
+                call_tracker.mark_notified(symbol)
+                st.session_state[f"notify_result_{symbol}"] = result
+        if pend:
+            o, n = pend["old"], pend["new"]
+            when = (o.get("ts") or "")[:16].replace("T", " ")
+            st.markdown(
+                f'<div style="background:#ffab001f;border:2px solid #ffab00;border-radius:12px;padding:14px 18px;margin:4px 0 10px">'
+                f'<div style="font-size:1.15rem;font-weight:800;color:#ffab00">🔔 What changed since last check ({when} UTC)</div>'
+                f'<div style="color:#eee;margin-top:4px">Hold/Sell call: <b>{o["action"]}</b> → <b>{n["action"]}</b>'
+                f' &nbsp;·&nbsp; Add more?: <b>{o.get("add_action") or "n/a"}</b> → <b>{n.get("add_action") or "n/a"}</b>'
+                + (f' &nbsp;·&nbsp; price ${o["price"]:,.2f} → ${n["price"]:,.2f}' if o.get("price") and n.get("price") else "")
+                + '</div></div>', unsafe_allow_html=True)
+            if pend.get("why"):
+                st.markdown("**Why:** " + "; ".join(pend["why"][:8]))
+            res = st.session_state.get(f"notify_result_{symbol}")
+            if res:
+                st.caption("Alert delivery: " + ", ".join(f"{k} {v}" for k, v in res.items()))
+            if st.button("✅ Got it — hide this", key=f"ack_{symbol}"):
+                call_tracker.acknowledge(symbol)
+                st.rerun()
+        else:
+            st.caption(f"🔔 No change in the {symbol} call since your last check. "
+                       "A banner will appear here if the call flips (e.g. HOLD → TRIM or WAIT → ADD).")
+        with st.expander("🔔 Alert settings (optional — off by default)"):
+            explain("call_alerts")
+            cfg = notifier.configured()
+            settings = notifier.load_settings()
+            st.markdown(f"Telegram secrets set: **{'yes' if cfg['telegram'] else 'no'}** · "
+                        f"Email (SMTP) secrets set: **{'yes' if cfg['email'] else 'no'}**")
+            en = st.checkbox("Send me an alert when a call changes", value=settings["enabled"], key="notify_enabled",
+                             help="Off by default. Only works once the matching Replit Secrets are set.")
+            tg = st.checkbox("…by Telegram", value=settings["telegram"], key="notify_tg")
+            em = st.checkbox("…by email", value=settings["email"], key="notify_em")
+            new = {"enabled": en, "telegram": tg, "email": em}
+            if new != settings:
+                notifier.save_settings(new)
+                st.caption("Saved.")
+            if en and not (cfg["telegram"] or cfg["email"]):
+                st.info("Alerts are on, but no Telegram or email secrets are set yet, so nothing will be sent. "
+                        "See 'How do call-change alerts work?' above.")
+            hist = call_tracker.history(symbol)
+            if hist:
+                st.markdown("**Past call changes**")
+                st.dataframe(pd.DataFrame([{"When (UTC)": (h["new"].get("ts") or "")[:16].replace("T", " "),
+                                            "Call": f'{h["old"]["action"]} → {h["new"]["action"]}',
+                                            "Add?": f'{h["old"].get("add_action")} → {h["new"].get("add_action")}'}
+                                           for h in reversed(hist)]), hide_index=True, use_container_width=True)
+
+    # ------------------------------------------------------------------
+    def _render_add(self, a):
         st.subheader("➕ Good time to add more?")
-        a = get_add_advice(symbol, closes, positions)
         color = "#00c853" if a.action == "ADD" else "#90a4ae"
         st.markdown(
             f'<div style="background:{color}1a;border-left:5px solid {color};border-radius:8px;padding:12px 16px;margin:4px 0 8px">'
