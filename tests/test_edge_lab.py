@@ -229,3 +229,29 @@ def test_clean_drops_pre_miner_history():
     p = _rw(800, start="2016-06-01")
     assert el.clean(p, "RIOT").index[0] >= pd.Timestamp("2017-10-04")
     assert el.clean(p, "HUT").index[0] == p.index[0]
+
+
+# ── report layer ─────────────────────────────────────────────────────
+def test_build_report_on_synthetic_data_and_scorecard():
+    from utils import edge_report as er
+    idx = pd.date_range("2014-09-17", "2026-10-19", freq="D")
+    rng = np.random.default_rng(12)
+    btc = pd.Series(300 * np.exp(np.cumsum(rng.normal(0.001, 0.035, len(idx)))), idx)
+    sidx = pd.bdate_range("2017-10-04", "2026-10-19")
+    b_on = btc.reindex(sidx).ffill()
+    stock = pd.Series(np.exp(1.3 * np.log(b_on / b_on.iloc[0]) + np.cumsum(rng.normal(0, 0.03, len(sidx)))), sidx)
+    rep = er.build("RIOT", stock, btc)
+    sc = er.scorecard(rep)
+    assert len(sc) == 8 and set(sc["Backtest result"]) <= {es.EDGE, es.NO_EDGE, es.INSUFFICIENT}
+    assert rep["halving"]["phase"]["days"] == 912
+    rep2 = er.build("RIOT", stock, btc)
+    assert er.scorecard(rep2).equals(sc)                  # deterministic
+
+
+def test_build_report_short_history_is_na_not_fake():
+    from utils import edge_report as er
+    p = _rw(150, start="2026-03-01")
+    rep = er.build("XYZ", p, None)
+    for k in ("lppls", "fragility", "hurst", "tails", "kelly", "halving"):
+        assert rep[k]["available"] is False
+    assert set(er.scorecard(rep)["Backtest result"]) == {es.INSUFFICIENT}

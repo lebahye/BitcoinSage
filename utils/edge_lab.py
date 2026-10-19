@@ -62,34 +62,50 @@ LPPLS_M = (0.1, 0.25, 0.4, 0.55, 0.7, 0.85)
 LPPLS_W = (3.0, 4.5, 6.0, 7.5, 9.0, 11.0, 13.0)
 
 
-def lppls_fit_window(logp: np.ndarray) -> Optional[dict]:
-    """Best grid fit of one window. Returns params + whether it qualifies (positive / negative)."""
-    n = len(logp)
-    if n < 30 or not np.all(np.isfinite(logp)):
-        return None
+from functools import lru_cache  # noqa: E402
+
+
+@lru_cache(maxsize=64)
+def _lppls_basis(n: int):
+    """Design matrices and pseudo-inverses for every (tc, m, ω) grid point for a window of n bars.
+    They depend only on n (time runs 0…n−1), so each is built once and reused for every date."""
     t = np.arange(n, dtype=float)
     dt = float(n - 1)
-    best = None
+    Xs, params = [], []
     for tcf in LPPLS_TC:
         tc = dt + tcf * dt
-        tau = tc - t                                   # > 0 everywhere
+        tau = tc - t
         ltau = np.log(tau)
         for m in LPPLS_M:
             f = tau ** m
             for w in LPPLS_W:
-                X = np.column_stack([np.ones(n), f, f * np.cos(w * ltau), f * np.sin(w * ltau)])
-                coef, *_ = np.linalg.lstsq(X, logp, rcond=None)
-                r = logp - X @ coef
-                sse = float(r @ r)
-                if best is None or sse < best[0]:
-                    best = (sse, tcf, tc, m, w, coef)
-    sse, tcf, tc, m, w, (A, B, C1, C2) = best
+                Xs.append(np.column_stack([np.ones(n), f, f * np.cos(w * ltau), f * np.sin(w * ltau)]))
+                params.append((tcf, tc, m, w))
+    X = np.stack(Xs)                                   # (G, n, 4)
+    Xp = np.linalg.pinv(X)                             # (G, 4, n)
+    return X, Xp, params
+
+
+def lppls_fit_window(logp: np.ndarray) -> Optional[dict]:
+    """Best grid fit of one window. Returns params + whether it qualifies (positive / negative)."""
+    logp = np.asarray(logp, float)
+    n = len(logp)
+    if n < 30 or not np.all(np.isfinite(logp)):
+        return None
+    X, Xp, params = _lppls_basis(n)
+    coefs = Xp @ logp                                  # (G, 4) exact least squares per grid point
+    resid = logp[None, :] - np.einsum("gnk,gk->gn", X, coefs)
+    sse = np.einsum("gn,gn->g", resid, resid)
+    g = int(np.argmin(sse))
+    tcf, tc, m, w = params[g]
+    A, B, C1, C2 = coefs[g]
+    dt = float(n - 1)
     C = float(np.hypot(C1, C2))
     damping = m * abs(B) / (w * C) if C > 0 else np.inf
-    osc = w / np.pi * np.log((tc - 0.0) / (tc - dt))
+    osc = w / np.pi * np.log(tc / (tc - dt))
     ok = (0.01 < m < 0.99) and (2 < w < 15) and damping >= 0.8 and osc >= 2.5
     return {"A": float(A), "B": float(B), "C": C, "m": m, "omega": w, "tc_frac": tcf, "tc_bars": tc - dt,
-            "damping": float(damping), "oscillations": float(osc), "sse": sse,
+            "damping": float(damping), "oscillations": float(osc), "sse": float(sse[g]),
             "positive": bool(ok and B < 0), "negative": bool(ok and B > 0)}
 
 
@@ -110,7 +126,7 @@ def lppls_confidence_at(logp: np.ndarray, end: int, windows=LPPLS_WINDOWS) -> Op
             "tc_bars_median": float(np.median([f["tc_bars"] for f in pos])) if pos else None}
 
 
-def lppls_series(price: pd.Series, step: int = 10, windows=LPPLS_WINDOWS) -> pd.DataFrame:
+def lppls_series(price: pd.Series, step: int = 5, windows=LPPLS_WINDOWS) -> pd.DataFrame:
     """Point-in-time LPPLS confidence every `step` bars (columns pos, neg), forward-filled
     only until the next computation date (it never borrows a later value)."""
     p = price.dropna().astype(float)
