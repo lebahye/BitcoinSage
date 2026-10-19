@@ -17,7 +17,20 @@ from utils import edge_report as er
 from utils import edge_stats as es
 from utils import signal_hub
 
-SYMBOLS = list(er.PEERS)
+SYMBOLS = list(er.PEERS)          # peer set for the robustness check (kept small: each one is a full lab run)
+
+
+def stock_choices() -> list:
+    """Dropdown: your holdings (largest first), then every miner / AI-hosting miner the app knows."""
+    from utils.tickers import CORRELATION_UNIVERSE, MINING_STOCKS, WATCHLIST, resolve
+    try:
+        from components.personal_portfolio import PersonalPortfolio
+        pos = PersonalPortfolio._load_positions()
+    except Exception:
+        pos = {}
+    held = sorted([t for t, p in pos.items() if p.get("shares", 0) > 0], key=lambda t: -pos[t].get("shares", 0))
+    miners = [t for t, (g, _) in CORRELATION_UNIVERSE.items() if g == "Miners"]
+    return list(dict.fromkeys([resolve(t) for t in held + list(er.PEERS) + list(MINING_STOCKS) + list(WATCHLIST) + miners]))
 
 GLOSSARY = {
     "page": ("How to read this page", """
@@ -395,13 +408,15 @@ def render():
     st.warning("**Experimental research tools.** Nothing here changes My Plan or the Stock Verdict. Each tool shows "
                "its own honest backtest; most ideas — even famous ones — fail that test. Not financial advice.")
     _explain("page")
-    if "edge_symbol_saved" not in st.session_state:
-        st.session_state["edge_symbol_saved"] = "RIOT"
-    if "edge_symbol" not in st.session_state:
-        st.session_state["edge_symbol"] = st.session_state["edge_symbol_saved"]
-    symbol = st.selectbox("Stock", SYMBOLS, key="edge_symbol",
-                          help="Bitcoin is always analysed alongside. Miner history starts when each company began mining.")
-    st.session_state["edge_symbol_saved"] = symbol
+    from components.stock_verdict import pick_following_verdict
+    symbol = pick_following_verdict(
+        st, "Stock", stock_choices(), "edge_symbol", "RIOT",
+        help="Your holdings and every miner the app tracks; follows the ⚖️ Stock Verdict choice. Bitcoin is always "
+             "analysed alongside. History starts when the company began mining where that date is on file "
+             f"({', '.join(el.MINER_START)}); otherwise the full Yahoo history is used.")
+    if symbol.upper() not in el.MINER_START:
+        st.caption(f"ℹ️ {symbol}: full Yahoo price history used (no mining-start date on file) — if the company had "
+                   "a different business earlier, older results mix in that period.")
     with st.spinner(f"Running the lab for {symbol} (first run ≈ 10–20 s, then cached 6 h)…"):
         rep = _safe(_build_cached, symbol)
     if not rep:

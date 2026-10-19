@@ -131,3 +131,15 @@ def test_pick_following_verdict(monkeypatch):
     assert sv.pick_following_verdict(C(), "x", opts, "k", "RIOT") == "CLSK"
     ss["verdict_symbol_saved"] = "NVDA"                                         # not in this page's list
     assert sv.pick_following_verdict(C(), "x", opts, "k", "RIOT") == "CLSK"
+
+
+def test_edge_lab_dropdown_has_all_miners_and_holdings():
+    from components.edge_lab import stock_choices
+    from components.personal_portfolio import DEFAULT_POSITIONS
+    from utils.tickers import MINING_STOCKS, resolve
+    ch = stock_choices()
+    assert ch[0] == "RIOT" and len(ch) == len(set(ch))
+    for t in list(MINING_STOCKS) + ["MARA", "CLSK", "HUT", "WULF", "IREN", "CORZ", "BTDR", "CIFR"]:
+        assert resolve(t) in ch, t
+    for t in DEFAULT_POSITIONS:
+        assert resolve(t) in ch, t

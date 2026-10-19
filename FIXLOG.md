@@ -428,3 +428,27 @@ live toggle 0 exceptions; Verdict = My Plan for RIOT/MARA. No app.py edits.
 
 Risks: peer MW/contract figures come from secondary trackers and go stale; Polymarket slugs can be retired
 (→ N/A); yfinance short interest is ~2 weeks old; only RIOT has a converts map so far.
+
+# 🌐 All stocks, not just RIOT (branch global/verdict-deep, rebased on main @ 1f97c04)
+
+| Page / util | RIOT-only before? | Now |
+|---|---|---|
+| Reflexivity: focus stock | No (selectable), defaulted to largest holding | Follows the ⚖️ Verdict stock (when it's in the miner list), else largest holding |
+| Reflexivity: 💰 value check (sum of parts) | **Yes** ("RIOT only") | Any ticker: BTC held from `utils/company_facts.py`; cash/debt from the filing if on file, else Yahoo (labelled); per-company facts table with N/A per field; AI-lease NOI only pre-filled for RIOT (others 0 = not disclosed); mNAV hidden when a company holds almost no BTC |
+| Reflexivity: ⛏️ miner stress vs cost to mine | **Yes** (Riot's cost) | The focus company's cited cost to mine; N/A where not disclosed (only RIOT on file) |
+| Reflexivity: 🧾 dilution SEC filings check | **Yes** (Riot CIK) | Any US filer via CIK in the facts file; N/A for foreign filers (BTDR) |
+| Reflexivity: converts map | RIOT (new) | Any ticker in `deep_facts.CONVERTS` (RIOT only so far; others N/A) |
+| ⚖️ Verdict: sum-of-parts + miner-stress rows | **Yes** ("RIOT only", weight 0) | Any ticker; weighted only when BTC, cash and debt are on file **and** no undisclosed AI-lease income would be missing (AI hosts → context only, weight 0); miner stress N/A without a cited cost |
+| 🧭 My Plan: holding selector | Defaulted to RIOT | Holdings largest-first; follows the Verdict stock when held; remembered across sections |
+| 🧭 My Plan: "moving with peers?" divergence check | **Yes** | Any stock in the correlation universe (anchor = that stock) |
+| ₿ Bitcoin to 2030 | No (used My Plan's stock) but Riot-specific texts/AI sources | Generic factor help; AI facts per company (cited MW/contract value or N/A); Riot-only caption only for RIOT |
+| 🔗 Correlation Map | **Yes** (anchor RIOT) | Anchor selector (holdings + miners + AI hosts), follows the Verdict; RIOT is included as a peer for other anchors; one shared cached download. Menu label in app.py left as "RIOT Correlation Map" (app.py kept minimal) |
+| 🧪 Edge Lab dropdown | RIOT/MARA/CLSK/HUT only | Holdings + every miner the app tracks (13), follows the Verdict; peer robustness check still uses the 4-stock set (each is a full lab run); note shown when no mining-start date is on file |
+| Trade Signals / Strategy Lab / Sentiment / Weekly outlook | No — RIOT is only a default/first item | unchanged |
+| app.py Command Center line "Your RIOT plan" | Yes (RIOT is the largest holding) | unchanged (app.py kept minimal) — noted |
+| 🛡️ RIOT Protection (Portfolio sub-tab) | Yes by design (protects the RIOT position) | unchanged — noted |
+
+Facts coverage (`utils/company_facts.py`, LAST_VERIFIED 2026-10-19, every value cited + dated; core = BTC held, cash, debt,
+cost to mine, converts, AI MW): no company is "full". RIOT 5/6 (debt from Yahoo); CIFR, WULF, CORZ 5/6 (no cost to mine);
+CLSK 4/6; KEEL 3/6; HUT 2/6; MARA, BTDR, MSTR, IREN, BTBT 1/6. Not verified → N/A (e.g. MARA cash/debt, IREN BTC/debt).
+Tests: tests/test_all_stocks.py (30) run every generalised function for 5–14 tickers.
