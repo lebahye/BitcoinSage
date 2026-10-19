@@ -242,6 +242,11 @@ class HoldingPlan:
                 st.markdown("---")
 
         self._render_add(add)
+        try:
+            from components.signal_reconcile import render_cross_tab_panel
+            render_cross_tab_panel(symbol, adv.action, add.action if add else None)
+        except Exception:
+            pass
 
         self._render_events(symbol, today, events, have_earn, height)
 

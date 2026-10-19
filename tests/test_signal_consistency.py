@@ -94,3 +94,22 @@ def test_short_indicators_return_none():
 ])
 def test_reconcile_points_to_my_plan(short, long_, must):
     assert must in reconcile(short, long_, "RIOT")
+
+
+def test_forecast_centre_and_my_plan_price_match_snapshot():
+    from utils.stat_forecast import forecast_range
+    h = _ohlcv()
+    snap = snapshot_from_ohlcv(h)
+    assert forecast_range(h["Close"], 21)["centre"] == pytest.approx(snap["price"])
+    assert compute_facts(h["Close"])["price"] == pytest.approx(snap["price"])
+    assert compute_facts(h["Close"])["sma200"] == pytest.approx(snap["sma200"])
+
+
+def test_monte_carlo_is_stable_and_gives_no_advice():
+    from utils.risk_engine import RiskEngine
+    h = _ohlcv()
+    df = pd.DataFrame({"A": h["Close"], "B": h["Close"] * 1.1})
+    eng = RiskEngine()
+    a, b = eng.run_monte_carlo_simulation(df, 200, 21), eng.run_monte_carlo_simulation(df, 200, 21)
+    assert a["prob_profit"] == b["prob_profit"]
+    assert "add" not in a["interpretation"].lower().replace("my plan", "")

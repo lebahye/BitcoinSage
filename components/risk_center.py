@@ -368,7 +368,7 @@ class RiskCenter:
         with col2: st.metric("Prob of Profit", f"{mc_results['prob_profit']:.1f}%")
         with col3: st.metric("Prob +10%", f"{mc_results['prob_gain_10_pct']:.1f}%")
         with col4: st.metric("Prob -10%", f"{mc_results['prob_loss_10_pct']:.1f}%")
-        st.info(f"**Outlook:** {mc_results['interpretation']}")
+        st.info(f"**What the simulation says:** {mc_results['interpretation']}")
         cols = st.columns(5)
         for col, (pct, key) in zip(cols, [
             ('5th', 'percentile_5'), ('25th', 'percentile_25'), ('50th (Median)', 'percentile_50'),

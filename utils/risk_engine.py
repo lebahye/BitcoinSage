@@ -228,9 +228,12 @@ class RiskEngine:
             current_value = portfolio_data.iloc[-1].sum()
             
             simulations = np.zeros((days_forward, num_simulations))
+            # Fixed seed: the same data gives the same picture on every rerun (an unseeded
+            # simulation made the 'probabilities' jump around each time the page refreshed).
+            rng = np.random.default_rng(42)
             
             for sim in range(num_simulations):
-                daily_returns = np.random.normal(mean_return, std_return, days_forward)
+                daily_returns = rng.normal(mean_return, std_return, days_forward)
                 
                 portfolio_path = current_value * (1 + daily_returns).cumprod()
                 simulations[:, sim] = portfolio_path
@@ -276,16 +279,16 @@ class RiskEngine:
             return {}
     
     def _interpret_monte_carlo(self, prob_profit, prob_loss_10):
-        """Interpret Monte Carlo results"""
-        if prob_profit > 70 and prob_loss_10 < 15:
-            return "BULLISH OUTLOOK: High probability of gains with limited downside risk. Good time to hold or add."
-        elif prob_profit > 55:
-            return "MODERATELY BULLISH: More likely to gain than lose, but significant volatility expected."
-        elif prob_profit < 45:
-            return "BEARISH OUTLOOK: Higher probability of losses. Consider reducing exposure or hedging."
-        else:
-            return "NEUTRAL: Equal chance of gains/losses. Market direction unclear, wait for better setup."
-    
+        """Describe the simulation without turning it into a buy/sell call.
+
+        The simulation's drift is the basket's own past average daily return, so 'chance of
+        profit' mostly restates the recent trend; it is not a forecast and has not been
+        backtested.  Hold/sell guidance lives only in 🧭 My Plan."""
+        return (f"In {prob_profit:.0f}% of simulated paths the basket ended higher and in {prob_loss_10:.0f}% it fell "
+                "more than 10%. These paths assume the last period's average daily move and volatility simply "
+                "continue — a 'what if the recent trend persists' picture, not a forecast. "
+                "For what to actually do, see 🧭 My Plan.")
+
     def calculate_beta_analysis(self, symbols, benchmark='BTC-USD', period='1y'):
         """
         Calculate Beta for each stock vs Bitcoin

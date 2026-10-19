@@ -193,6 +193,14 @@ def _render_command_center(selected_stocks, stock_data, stock_data_available, da
             icon = {"HOLD": "🟢", "TRIM": "🟡", "ROTATE": "🔄", "SELL": "🔴"}[adv.action]
             st.markdown(f"**Your RIOT plan right now: {icon} {adv.action}** ({adv.confidence} confidence, "
                         f"{adv.risk_score}/{adv.max_score} risk points) — full reasoning in the **🧭 My Plan** tab.")
+            try:
+                from utils.signal_hub import short_term_signal
+                from utils.news_sentiment import news_sentiment
+                stt, nws = short_term_signal("RIOT"), news_sentiment("RIOT")
+                st.caption(f"Short-term context (doesn't override your plan): Trade Signals **{stt.get('signal', 'N/A')}** · "
+                           f"news tone **{nws.get('label', 'n/a')}** · same prices and RSI on every tab.")
+            except Exception:
+                pass
     except Exception:
         pass
 

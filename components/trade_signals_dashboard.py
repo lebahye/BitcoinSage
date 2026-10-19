@@ -33,9 +33,16 @@ class TradeSignalsDashboard:
     def render(self, data_fetcher=None, options_analyzer=None):
         st.title("🚦 Trade Signal Dashboard")
         st.markdown(
-            "Real-time BUY / HOLD / SELL verdicts for all 9 mining stocks — "
-            "with exact entry, stop-loss, and take-profit levels."
+            "Short-term (days–weeks) BUY / HOLD / SELL reads for the 9 mining stocks, from 8 technical rules. "
+            "Rules-based, **not AI**, and **not backtested** — a timing aid, not a decision."
         )
+        try:
+            from components.signal_reconcile import render_plan_banner
+            render_plan_banner(_WATCHLIST)
+        except Exception:
+            pass
+        from utils.explain import explain
+        explain("trade_signal")
 
         with st.spinner("Analyzing all 9 stocks across 8 factors…"):
             results = self.engine.analyze_all()
@@ -95,7 +102,7 @@ class TradeSignalsDashboard:
         with c2:
             st.metric("🟡 HOLD", len(holds), help="Wait — no clear edge yet")
         with c3:
-            st.metric("🔴 SELL / Short", len(sells), help="Overbought or momentum reversing")
+            st.metric("🔴 SELL (short-term)", len(sells), help="Short-term momentum is weak or reversing. Not advice to short-sell, and not a reason on its own to sell a long-term holding.")
         with c4:
             top = results[0] if results and results[0]['signal'] != 'N/A' else None
             if top:
@@ -237,12 +244,20 @@ In strong downtrends (50-MA falling > 2.5% in 10 days), BUY threshold rises to 4
             unsafe_allow_html=True,
         )
 
+        if signal == 'SELL':
+            st.caption(f"Short-term warning only (price ${cur:.2f}). The entry/stop/target levels below are for a "
+                       "*new buy* and don't apply. This is **not** advice to short-sell; if you hold it, follow 🧭 My Plan.")
+            reasons = [x for x in r.get('reasons', []) if 'Downtrend' not in x and 'Uptrend' not in x][:3]
+            if reasons:
+                st.caption("**Why:** " + "  ·  ".join(reasons))
+            return
+
         if pt:
             m1, m2, m3, m4 = st.columns(4)
             with m1:
                 delta_to_entry = (pt['entry'] - cur) / cur * 100 if cur > 0 else 0
                 st.metric(
-                    "Entry" if signal == 'BUY' else "Short Entry",
+                    "Entry",
                     f"${pt['entry']:.2f}",
                     f"{delta_to_entry:+.1f}% from now",
                 )
@@ -440,7 +455,8 @@ In strong downtrends (50-MA falling > 2.5% in 10 days), BUY threshold rises to 4
             # ── Price targets ───────────────────────────────────────────────
             pt = r.get('price_targets')
             if pt:
-                st.markdown("**🎯 Price Targets (ATR-based stops)**")
+                st.markdown("**🎯 Levels for a new short-term buy (ATR-based stop, Fibonacci targets)**"
+                            + ("  \n_Signal is SELL — these levels only apply if the setup later turns to BUY._" if signal == 'SELL' else ""))
                 t1, t2, t3, t4 = st.columns(4)
                 with t1:
                     delta_entry = (pt['entry'] - pt['current_price']) / pt['current_price'] * 100
