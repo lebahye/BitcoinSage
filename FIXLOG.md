@@ -208,3 +208,81 @@ Note: the smoke "error boxes" count per section (Risk Center 6, Polymarket 18, �
 - Tests: 32 pass (3 new: no-lookahead, episodes/forward-return timing, end-to-end shapes). Headless ok; smoke 0
   exceptions / 0 failure boxes (one intermediate run hit Yahoo "Too Many Requests" in Options/Flow after ~10 back-to-back
   sweeps; re-run after a pause was clean).
+
+---
+
+# Signals audit — Trade Signals, "AI Predictions", Sentiment & News (branch `global/signals-audit`, Oct 19 2026)
+
+Base: origin/main 5c63f21 (includes the V2 ADD/WAIT, alerts, event calendar and track record).
+Every step: `py_compile`, all tests, headless `streamlit run` health check, AppTest smoke visiting all 15 sections.
+
+## Audit findings (before fixes, live data Oct 19 2026)
+| Feature | File | Works live? | Real or fake? | Actual AI/ML? | Contradictions |
+|---|---|---|---|---|---|
+| 🚦 Trade Signals BUY/HOLD/SELL | utils/trade_signal_engine.py | Yes | Real rules (8 indicators); fell back to fake `HOLD 40%` + RSI 50 on missing data; sentiment factor always 0 without an Alpha Vantage key | No — points system | Own 3-month download; SELL cards showed *long* entry/stop/targets labelled "Short Entry" |
+| 🎯 "AI Predictions" (Next-Mover) | utils/next_mover_engine.py | Yes | Real rules; "Run Probability" was just the weighted score with a % sign; missing factors filled with 50 | **No** — weighted score, no model | RSI used a simple-average formula → **RIOT RSI 10.7 here vs 27.1 on Trade Signals / My Plan** |
+| 📈 Technical Analysis RSI/MACD | components/advanced_ta_dashboard.py | Yes | Real; RSI 50 on error | No | Same RSI mismatch (10.7); MACD with adjust=True EMAs (differs from other tabs) |
+| 🔮 Forecast Center targets | components/weekly_outlook.py | Yes | **Fake**: target = price × (1 ± \|score\|×5%×horizon); "probability"/"confidence" = 50 + \|score\|×8/×10. RIOT: 1W $8.31 (−40%) at "95%", 4W **$1.61 (−88%) at "86%"**, outside its own "range" $11.73–16.21. "Options flow" score used no options data; "Dark pool" score used no dark-pool data | No | A third BUY/SELL ("Avoid / Hedge") contradicting My Plan (TRIM) and Trade Signals (HOLD) |
+| 📰 "Mining Sector Sentiment" | components/sentiment_analysis.py | Yes | **Mislabelled**: price momentum vs BTC, not sentiment; 5.0/10 on error | No | Duplicated Next-Mover relative strength |
+| 📰 News | components/sentiment_analysis.py | — | **No news at all** in the "Sentiment & News" tab | — | — |
+| 😨 Fear & Greed | components/sentiment_analysis.py | Yes | Home-made composite (VIX/BTC/DXY/gold/SPY step points); silent 50 on error. Today 50 vs the published Crypto F&G 59 | No | Forecast Center treated "greed" as both bullish (+0.5) and bearish (−0.5) |
+| Alpha Vantage sentiment | utils/sentiment_analyzer.py | Key not set on the box | AV's current rate-limit reply (`Information`) slipped through as an empty feed → silent Neutral 0.0 | AV's NLP is real when it works | Next-Mover warning blamed "free-tier limit" even when no key was set |
+| 🎲 Monte Carlo outlook | utils/risk_engine.py | Yes | Unseeded (numbers changed every rerun); drift = past average return; said "Good time to hold or add" / "Consider reducing exposure" | No | Buy/sell advice competing with My Plan |
+| 🌊 "Dark pool" | utils/unified_data_fetcher.py | Yes | Ordinary Yahoo volume + VWAP labelled as dark-pool activity | No | — |
+| 🧭 My Plan HOLD/TRIM/SELL/ROTATE + ADD/WAIT, track record | utils/holding_advisor.py, signal_backtest.py | Yes | Real, transparent rules; backtest honest (no edge shown) | No (rules + backtest) | Source of truth — unchanged |
+| Path-to-2030 bands | components/holding_plan.py | Yes | Real (editable scenarios + volatility band) | Statistical, labelled | — |
+
+**Is there an actual AI prediction anywhere? No.** No model is trained or called and no LLM API is used. Every
+"prediction" is rules arithmetic. The only statistical forecasts are My Plan's volatility band and (new) the Forecast
+Center range, both labelled as such.
+
+## Step A1 — One source of truth for prices and indicators
+- New `utils/indicators.py` (Wilder RSI shared with My Plan, adjust=False MACD, Bollinger, Stochastic, ATR, SMA, volume
+  ratio; `None` when data is short — never RSI 50). New `utils/signal_hub.py`: cached 2-year daily OHLCV (15 min, failures
+  not cached), indicator snapshot, `short_term_signal()`, `long_term_call()` (wraps My Plan), `reconcile()` wording.
+- Trade Signals, Next-Mover and Technical Analysis now read bars from the hub and indicators from `utils/indicators`.
+  Live after fix: **RIOT RSI 27.1 on all four tabs** (was 27.1 / 10.7 / 10.7 / 27.1); all 9 miners agree likewise.
+- Missing data → `N/A` signal (grey) instead of a fake HOLD; Next-Mover drops missing factors and re-weights (no 50s).
+- "🎯 AI Predictions" renamed **🎯 Next-Mover Ranking** with a plain statement: rules-based, not AI, score not a probability,
+  not backtested. "Run Probability" removed. Top pick no longer recomputes the whole ranking twice.
+
+## Step A2 — Real news and an honest sentiment score (no new keys)
+- New `utils/news_sentiment.py`: headlines from Yahoo Finance search + Google News RSS (7 days, de-duplicated), scored by a
+  transparent finance keyword list (score −1…+1, Bullish ≥ +0.15, Bearish ≤ −0.15); uses Alpha Vantage NLP instead when a
+  key is set and works. Published **Crypto Fear & Greed Index** (alternative.me). Unavailable → `n/a`, never neutral.
+- `components/sentiment_analysis.py` rewritten: tone table for RIOT + selected miners, clickable headlines with date,
+  publisher and the words that drove the score, F&G gauge with yesterday/week-ago. Removed the momentum-as-sentiment table,
+  the home-made F&G and dead code.
+- Trade Signals and Next-Mover use the same news numbers (live: RIOT −0.06 Neutral, 38 headlines; MARA −0.27 Bearish).
+- `utils/sentiment_analyzer.py`: AV `Information`/`Note` replies are now errors.
+
+## Step A3 — Forecast Center: honest statistical range
+- New `utils/stat_forecast.py`: centre = today's price (no direction guess), 68%/90% bands from last-year daily volatility
+  × √days, plus a **point-in-time backtest of the hit rate** over 3 years. RIOT live: 1-month 68% range $10.84–$18.00
+  (held 70% of the time), 90% $9.21–$21.20 (held 97%); RIOT finished a month higher 50% of the time (why no direction).
+- `components/weekly_outlook.py` rewritten: range table, fan chart, and "Every signal in one place" (My Plan, Trade Signals,
+  news tone, reconciled). Removed invented targets/probabilities/confidence and the mislabelled options/dark-pool scores.
+
+## Step A4 — Reconcile tabs; remove competing advice
+- My Plan: expander "🔗 How the short-term tabs see RIOT right now" (Trade Signals, news tone, reconciliation sentence).
+- Trade Signals: My Plan banner at the top for your holdings (e.g. "Your long-term plan for RIOT: TRIM … short-term HOLD");
+  SELL cards no longer show long-trade levels or "Short Entry"; "Confidence %" explained as not a probability.
+- Command Center: one caption with the short-term signal and news tone, marked as not overriding the plan.
+- Monte Carlo: fixed seed (stable numbers) and descriptive text instead of "add"/"reduce" advice.
+- Institutional Flow: honest caption that "dark pool" readings are estimated from ordinary volume.
+- Beginner help: `utils/explain_signals.py` (signal hierarchy, trade signal, news tone, fear & greed, next-mover,
+  statistical range), merged into `GLOSSARY`/`HELP` with a 2-line change in `utils/explain.py`.
+
+## Tests and verification
+- New: `tests/test_signal_consistency.py` (RSI identical across My Plan, Trade Signals, TA, Next-Mover and the hub; MACD;
+  price; N/A on no data; reconcile wording; forecast centre = My Plan price; Monte Carlo stable + no advice),
+  `tests/test_news_sentiment.py`, `tests/test_stat_forecast.py` (coverage ≈ 68%/90% on a random walk; target inside range).
+- **55 tests pass** (32 before). Headless health ok. Smoke: 0 exceptions, 0 failure boxes, all 15 sections load; Strategy Lab
+  error boxes 2 → 0.
+
+## Remaining risks
+- Headline keyword tone is crude (misses negation/sarcasm; some non-English headlines score 0) and is not validated as
+  predictive — labelled as such. Google News RSS / Yahoo search are unofficial endpoints and may change or rate-limit.
+- Trade Signals and Next-Mover rules remain untested on history; only My Plan has a track record (and shows no timing edge).
+- Volatility bands assume recent volatility persists; crashes are fatter-tailed than the bands (hit rates shown).
+- Each section now shares one 2-year download per ticker; the first load after the 15-minute cache expires is slower.

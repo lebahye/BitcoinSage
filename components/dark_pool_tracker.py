@@ -10,6 +10,9 @@ class DarkPoolTracker:
         
         st.subheader("🌊 Dark Pool Activity Monitor")
         st.write("Track institutional order flow and unusual volume patterns that may indicate smart money movements.")
+        st.caption("ℹ️ Honest label: no real dark-pool (off-exchange) data is available for free. Everything here is "
+                   "estimated from ordinary Yahoo Finance daily volume and VWAP — 'dark pool' readings are volume "
+                   "patterns, not actual institutional prints.")
         
         # Overview metrics
         self._render_overview_metrics(selected_stocks, data_fetcher)
