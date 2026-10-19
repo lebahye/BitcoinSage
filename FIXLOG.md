@@ -79,3 +79,24 @@ Streamlit `AppTest` against live Yahoo Finance data and records uncaught excepti
   "Crypto Market Correlation" (was always empty — same alignment bug), and Market Overview's BTC/VIX/S&P strip (duplicate of the
   Command Center). Each now shows a one-line pointer to the new tab.
 - Smoke: 11 tests pass, 0 exceptions, 0 error boxes; new tab metrics populated. ✅
+
+### Step 5 — "🧭 My Plan": one canonical Hold / Trim / Sell / Rotate call (Priority D/E)
+- New `utils/holding_advisor.py` (pure logic, `tests/test_holding_advisor.py` 6 tests) and `components/holding_plan.py` (first tab).
+- Inputs (all live or user-saved): price vs 200-day/50-day average, drawdown from 52-week high, Bitcoin vs its 200-day average,
+  VIX level, RIOT-vs-peers divergence (from the correlation module), gain vs cost basis, concentration (% of saved holdings),
+  the user's own target price (`portfolio_targets.json`), Yahoo analyst low/avg/high targets (shown as context, not scored).
+  Missing inputs are listed as missing and lower confidence — never defaulted.
+- Rules tuned for a risk-averse 2030 holder: default HOLD; TRIM when own target hit (25%), concentration > 40% (10%), or big gain
+  + ≥3 risk points (20%); SELL only at ≥5/8 risk points; ROTATE a slice only when RIOT lags peers by >15% and a peer is in an uptrend.
+  Each call shows reasons, confidence, risk points and "What would change my mind" price levels. When a trim would realise a loss
+  it says so and offers the minimum alternative (stop adding).
+- Path to 2030: plan-year slider, editable Bear/Base/Bull yearly-return assumptions (clearly labelled as assumptions), a data-driven
+  ±1σ range from the stock's own volatility, analyst 12-month markers, the user's target line, and position value in each scenario.
+  Plus a staged-exit education box and an "all holdings at a glance" table.
+- `app.py`: removed the never-called `_render_decision_summary`; Command Center rewritten (Bitcoin, VIX with calm/nervous/fear,
+  selected miners' real daily change — the old "Sector Pulse" compared the last two *hourly* bars of a price-weighted average —
+  data freshness, and a one-line "Your RIOT plan right now" pointer). Tabs reordered: long-term tabs first, trading tools after;
+  "New here?" guide added. Trade Signals labelled as short-term.
+- Live result today: RIOT **TRIM ~10% (Medium, 3/8 risk)** — driven by 80% concentration, price 28% below the 200-day average and
+  a −51% drawdown; Bitcoin above its 200-day and calm VIX keep it from SELL.
+- Smoke: 17 tests pass, 0 exceptions, 0 error boxes. ✅

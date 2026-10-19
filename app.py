@@ -30,6 +30,7 @@ from components.weekly_outlook import WeeklyOutlook
 from components.volatility_hole_chart import VolatilityHoleChart
 from components.reflexivity_dashboard import ReflexivityDashboard
 from components.riot_correlation_map import RiotCorrelationMap
+from components.holding_plan import HoldingPlan
 
 # ─── Page config (must be first Streamlit call) ──────────────────────────────
 
@@ -122,6 +123,10 @@ def get_reflexivity():
 def get_riot_corr():
     return RiotCorrelationMap()
 
+@st.cache_resource
+def get_holding_plan():
+    return HoldingPlan()
+
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -139,31 +144,13 @@ def _tab_error(tab_name: str, exc: Exception):
 
 
 def _render_command_center(selected_stocks, stock_data, stock_data_available, data_fetcher):
-    """Top-level command center: source, freshness, BTC pulse, sector pulse."""
+    """Single top strip: Bitcoin, fear gauge, miners today, data freshness, and the
+    one-line Hold/Sell call (details live only in the 🧭 My Plan tab)."""
+    from utils.explain import HELP
+    from utils.market_data import fetch_daily_closes
+
     st.subheader("🧭 Command Center")
-
-    source_label = (
-        "Schwab (real-time)" if getattr(data_fetcher, 'using_schwab', False) and stock_data_available
-        else "Yahoo Finance (delayed)" if stock_data_available
-        else "Offline / rate-limited"
-    )
-
-    last_update = "N/A"
-    sector_change = None
-    if stock_data_available and not stock_data.empty:
-        try:
-            last_idx = stock_data.index[-1]
-            last_update = str(last_idx)[:19]
-            if len(stock_data) > 1:
-                latest = stock_data.iloc[-1].mean()
-                prev = stock_data.iloc[-2].mean()
-                sector_change = ((latest - prev) / prev) * 100 if prev else 0
-        except Exception:
-            pass
-
-    btc_price = None
-    btc_change = None
-    vix = None
+    btc_price = btc_change = vix = None
     try:
         sentiment = data_fetcher.get_market_sentiment()
         btc_price = sentiment.get('btc_price')
@@ -172,148 +159,45 @@ def _render_command_center(selected_stocks, stock_data, stock_data_available, da
     except Exception:
         pass
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    with c1:
-        st.metric("Data Source", source_label)
-    with c2:
-        st.metric("Selected Miners", len(selected_stocks))
-    with c3:
-        st.metric("Last Price Update", last_update)
-    with c4:
-        if btc_price is not None:
-            st.metric("BTC", f"${btc_price:,.0f}", f"{btc_change:+.2f}%")
-        else:
-            st.metric("BTC", "N/A")
-    with c5:
-        if sector_change is not None:
-            st.metric("Sector Pulse", f"{sector_change:+.2f}%")
-        elif vix is not None:
-            st.metric("VIX", f"{vix:.2f}")
-        else:
-            st.metric("Sector Pulse", "N/A")
+    miners_today = None
+    last_close_date = None
+    try:
+        daily = fetch_daily_closes(tuple(selected_stocks), "1mo")
+        if not daily.empty and len(daily) > 1:
+            chg = daily.pct_change(fill_method=None).iloc[-1].dropna()
+            miners_today = float(chg.mean() * 100) if not chg.empty else None
+            last_close_date = daily.index[-1].date()
+    except Exception:
+        pass
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Bitcoin", f"${btc_price:,.0f}" if btc_price is not None else "N/A",
+              f"{btc_change:+.2f}% (24h)" if btc_change is not None else None,
+              help="Bitcoin's price. Miner stocks are a leveraged bet on it.")
+    if vix is not None:
+        mood = "fear" if vix >= 30 else "nervous" if vix >= 20 else "calm"
+        c2.metric("VIX fear gauge", f"{vix:.1f}", mood, delta_color="off", help=HELP["vix"])
+    else:
+        c2.metric("VIX fear gauge", "N/A")
+    c3.metric("Selected miners today", f"{miners_today:+.2f}%" if miners_today is not None else "N/A",
+              help="Average daily % change of the stocks picked in the sidebar (latest daily close vs the one before).")
+    source_label = ("Schwab (real-time)" if getattr(data_fetcher, 'using_schwab', False) and stock_data_available
+                    else "Yahoo (delayed)" if stock_data_available else "Offline")
+    c4.metric("Data", source_label, f"last close {last_close_date}" if last_close_date else None, delta_color="off",
+              help="Yahoo Finance prices are delayed ~15 minutes during market hours.")
+
+    try:
+        from components.holding_plan import get_advice
+        adv, *_ = get_advice("RIOT")
+        if adv is not None:
+            icon = {"HOLD": "🟢", "TRIM": "🟡", "ROTATE": "🔄", "SELL": "🔴"}[adv.action]
+            st.markdown(f"**Your RIOT plan right now: {icon} {adv.action}** ({adv.confidence} confidence, "
+                        f"{adv.risk_score}/{adv.max_score} risk points) — full reasoning in the **🧭 My Plan** tab.")
+    except Exception:
+        pass
 
     if not stock_data_available:
         st.warning("Price feed degraded. Use healthcheck.py before trusting analytics-heavy tabs.")
-    else:
-        st.caption("Use this strip as your quick read before diving into tabs.")
-
-
-def _render_decision_summary(selected_stocks, stock_data, stock_data_available, data_fetcher, options_analyzer):
-    """Consensus layer: regime, best long, biggest risk, best options setup, action bias."""
-    st.subheader("🧠 Decision Summary")
-
-    if not stock_data_available or stock_data.empty:
-        st.info("Decision Summary is limited because core price data is unavailable.")
-        return
-
-    # 1) Regime
-    btc_change = None
-    try:
-        sentiment = data_fetcher.get_market_sentiment()
-        btc_change = sentiment.get('btc_change')
-    except Exception:
-        pass
-
-    sector_change = 0.0
-    try:
-        if len(stock_data) > 1:
-            latest = stock_data.iloc[-1].mean()
-            prev = stock_data.iloc[-2].mean()
-            sector_change = ((latest - prev) / prev) * 100 if prev else 0
-    except Exception:
-        pass
-
-    if btc_change is None:
-        regime = "Mixed / Unknown"
-    elif btc_change > 2 and sector_change > 2:
-        regime = "Bullish Expansion"
-    elif btc_change < -2 and sector_change < -2:
-        regime = "Bearish Contraction"
-    elif btc_change > 0 and sector_change < 0:
-        regime = "Divergence"
-    else:
-        regime = "Neutral / Mixed"
-
-    # 2) Canonical best idea from Forecast Center
-    best_long = "N/A"
-    best_long_reason = ""
-    best_long_action = ""
-    try:
-        from components.weekly_outlook import WeeklyOutlook
-        fc = WeeklyOutlook()
-        forecasts = fc.get_forecast_data(selected_stocks, MINING_STOCKS, 'Weekly')
-        if forecasts:
-            forecasts = sorted(forecasts, key=lambda x: x.get('score', 0), reverse=True)
-            row = forecasts[0]
-            best_long = row.get('symbol', 'N/A')
-            best_long_action = row.get('action_label', '')
-            best_long_reason = (
-                f"{row.get('direction', 'N/A')} · {row.get('confidence', 0)}% confidence · "
-                f"target ${row.get('price_target', 0):.2f} · "
-                f"range ${row.get('range_low', 0):.2f}-${row.get('range_high', 0):.2f}"
-            )
-    except Exception:
-        pass
-    # 3) Biggest risk candidate from risk scores
-    biggest_risk = "N/A"
-    biggest_risk_reason = ""
-    try:
-        from components.risk_center import RiskCenter
-        rc = RiskCenter()
-        rdata = rc.get_risk_data(selected_stocks)
-        ranked = []
-        for sym in selected_stocks:
-            if sym in rdata:
-                ranked.append((sym, rdata[sym].get('risk_score', 0), rdata[sym].get('volatility', 0)))
-        if ranked:
-            ranked.sort(key=lambda x: x[1], reverse=True)
-            sym, score, vol = ranked[0]
-            biggest_risk = sym
-            biggest_risk_reason = f"risk score {score:.1f}, volatility {vol:.1f}%"
-    except Exception:
-        pass
-
-    # 4) Best options setup by total options volume
-    best_options = "N/A"
-    best_options_reason = ""
-    try:
-        best_vol = -1
-        for sym in selected_stocks:
-            calls, puts = data_fetcher.get_options_data(sym)
-            if calls is None or puts is None:
-                continue
-            pc = options_analyzer.analyze_put_call_ratio(calls, puts)
-            total_vol = pc.get('total_volume', 0)
-            if total_vol > best_vol:
-                best_vol = total_vol
-                best_options = sym
-                best_options_reason = f"total options volume {int(total_vol):,}, P/C {pc.get('put_call_ratio', 0):.2f}"
-    except Exception:
-        pass
-
-    # 5) Suggested action
-    if best_long_action in ["Accumulate", "Accumulate / Hold", "Hold / Selective Buy"] and best_long != "N/A":
-        action = f"Forecast Center favors {best_long} ({best_long_action}). Use options selectively if liquidity is good."
-    elif regime == "Bearish Contraction":
-        action = f"Prioritize protection; watch {biggest_risk} closely and avoid forcing entries."
-    elif regime == "Divergence":
-        action = f"Stay selective. Prefer leaders with confirmation and avoid crowded laggard bets."
-    else:
-        action = "Reduce conviction. Let Risk / Reflexivity / Options confirm before acting."
-
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Regime", regime)
-    c2.metric("Best Forecast", best_long)
-    c3.metric("Biggest Risk", biggest_risk)
-    c4.metric("Best Options Setup", best_options)
-    c5.metric("Action Bias", "Actionable" if "Lean" in action or "Prioritize" in action else "Wait / Selective")
-
-    st.markdown(
-        f"**Best Forecast — {best_long}:** {(best_long_reason or 'Insufficient signal detail')} {('· ' + best_long_action) if best_long_action else ''}  \n"
-        f"**Biggest Risk — {biggest_risk}:** {biggest_risk_reason or 'Insufficient risk detail'}  \n"
-        f"**Best Options Setup — {best_options}:** {best_options_reason or 'Insufficient options data'}  \n"
-        f"**Suggested Action:** {action}"
-    )
 
 
 # ─── Main ────────────────────────────────────────────────────────────────────
@@ -388,27 +272,49 @@ def main():
 
     _render_command_center(selected_stocks, stock_data, stock_data_available, data_fetcher)
 
-    # ── 12 Tabs ───────────────────────────────────────────────────────────────
+    with st.expander("👋 New here? How to use this dashboard", expanded=False):
+        st.markdown("""
+1. **🧭 My Plan** — start here. One clear call for each holding (**Hold / Trim / Sell / Rotate**), the reasons,
+   what would change the call, and a path-to-2030 price range.
+2. **🏆 Portfolio** — enter or edit your shares, cost basis and target prices. Everything else uses these numbers.
+3. **🔗 RIOT Correlation Map** — what really moves your RIOT shares (other miners, AI stocks, Bitcoin, market fear).
+4. **⚠️ Risk Center** and **🔄 Reflexivity** — how bad a Bitcoin crash could hit you, and where we are in the boom/bust cycle.
+5. The remaining tabs (Trade Signals, AI Predictions, Options, Flow, Technicals, Sentiment, Polymarket) are
+   **short-term trading tools**. As a long-term holder you can mostly ignore them.
+
+Hover over the small ⓘ next to any number, or open an "ℹ️ What is this?" box, for a plain-English explanation.
+Nothing here is financial advice.
+""")
+
+    # ── Tabs: long-term holder tabs first, short-term trading tools after ────
     tabs = st.tabs([
-        "📊 Market Overview",
+        "🧭 My Plan",
+        "🏆 Portfolio",
         "🔗 RIOT Correlation Map",
+        "📊 Market Overview",
+        "⚠️ Risk Center",
+        "🔄 Reflexivity",
+        "🔬 Strategy Lab",
         "🚦 Trade Signals",
         "🎯 AI Predictions",
         "⚡ Options Center",
         "🌊 Institutional Flow",
         "📈 Technical Analysis",
-        "📡 Live Polymarket",
         "📰 Sentiment & News",
-        "⚠️ Risk Center",
-        "🏆 Portfolio",
-        "🔬 Strategy Lab",
-        "🔄 Reflexivity",
+        "📡 Live Polymarket",
         "📖 Research",
     ])
 
-    (tab_market, tab_corr, tab_signals, tab_ai, tab_options, tab_flow, tab_ta,
-     tab_poly, tab_sentiment, tab_risk, tab_portfolio, tab_lab,
-     tab_reflex, tab_research) = tabs
+    (tab_plan, tab_portfolio, tab_corr, tab_market, tab_risk, tab_reflex, tab_lab,
+     tab_signals, tab_ai, tab_options, tab_flow, tab_ta,
+     tab_sentiment, tab_poly, tab_research) = tabs
+
+    # ── My Plan: the single source of truth for Hold / Trim / Sell / Rotate ──
+    with tab_plan:
+        try:
+            get_holding_plan().render()
+        except Exception as e:
+            _tab_error("My Plan", e)
 
     # ── 1 · Market Overview ───────────────────────────────────────────────────
     with tab_market:
@@ -431,6 +337,7 @@ def main():
 
     # ── 2 · Trade Signals ─────────────────────────────────────────────────────
     with tab_signals:
+        st.caption("⏱️ Short-term trading signals (days to weeks). For your long-term Hold/Sell call see 🧭 My Plan.")
         with st.spinner("Computing BUY/HOLD/SELL signals for all 9 stocks…"):
             try:
                 get_trade_signals().render(data_fetcher, options_analyzer)
