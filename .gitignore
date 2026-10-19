@@ -5,8 +5,7 @@
 *token*.json
 schwab_token.json
 
-# Local portfolio state
-portfolio_targets.json
+# Local portfolio state (target-price file is explicitly approved for GitHub)
 data/
 
 # Generated/runtime files
