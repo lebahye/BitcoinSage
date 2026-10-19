@@ -480,21 +480,65 @@ class RIOTProtection:
         unprotected_pnl = [(price - self.user_position['cost_basis']) * self.user_position['shares'] 
                           for price in price_scenarios]
         
-        # Example protected position (using typical put)
-        put_strike = current_price * 0.9
-        put_premium = current_price * 0.02  # Estimate 2% premium
+        # Live 90%-strike put — fetch real options data
+        put_strike = round(current_price * 0.9, 0)
+        put_premium = None
+        put_label = f"${put_strike:.0f} Put"
+        target_strike = current_price * 0.9
+
+        try:
+            import yfinance as yf
+            riot_ticker = yf.Ticker("RIOT")
+            exps = riot_ticker.options
+            # Find expiry 30-50 days out
+            from datetime import datetime, timedelta
+            today = datetime.now().date()
+            target_exp = today + timedelta(days=40)
+            best_exp = None
+            best_diff = 999
+            for exp_str in exps:
+                exp_d = datetime.strptime(exp_str, "%Y-%m-%d").date()
+                diff = abs((exp_d - target_exp).days)
+                if diff < best_diff:
+                    best_diff = diff
+                    best_exp = exp_str
+            if best_exp:
+                chain = riot_ticker.option_chain(best_exp)
+                puts = chain.puts
+                if not puts.empty:
+                    # Closest strike to 90% of current price
+                    puts = puts.copy()
+                    puts['dist'] = (puts['strike'] - target_strike).abs()
+                    closest = puts.nsmallest(1, 'dist').iloc[0]
+                    put_strike = float(closest['strike'])
+                    # Use midpoint of bid/ask if last is stale (volume = 0)
+                    bid = float(closest.get('bid', 0) or 0)
+                    ask = float(closest.get('ask', 0) or 0)
+                    last = float(closest.get('lastPrice', 0) or 0)
+                    if bid > 0 and ask > 0:
+                        put_premium = (bid + ask) / 2
+                    elif last > 0:
+                        put_premium = last
+                    put_label = f"${put_strike:.0f} Put ({best_exp}, live mid)"
+        except Exception:
+            pass
+
+        if put_premium is None:
+            st.warning("⚠️ Could not fetch live put options data — scenario chart unavailable. Refresh to retry.")
+            return
+
         put_cost = put_premium * self.user_position['shares']
-        
+
         protected_pnl = []
         for price in price_scenarios:
             share_pnl = (price - self.user_position['cost_basis']) * self.user_position['shares']
             put_pnl = max(0, put_strike - price) * self.user_position['shares']
             total_pnl = share_pnl + put_pnl - put_cost
             protected_pnl.append(total_pnl)
-        
+
         # Create interactive chart
         fig = go.Figure()
-        
+
         fig.add_trace(go.Scatter(
             x=price_scenarios,
             y=unprotected_pnl,
@@ -502,12 +546,12 @@ class RIOTProtection:
             name='Unprotected Position',
             line=dict(color='red', width=2)
         ))
-        
+
         fig.add_trace(go.Scatter(
             x=price_scenarios,
             y=protected_pnl,
             mode='lines',
-            name=f'Protected (${put_strike:.0f} Put)',
+            name=f'Protected ({put_label})',
             line=dict(color='green', width=2)
         ))
         

@@ -22,7 +22,7 @@ class BacktestingEngine:
             hist = ticker.history(start=start_date, end=end_date)
             
             if hist.empty:
-                return {}
+                return None
             
             hist = hist.reset_index()
             hist['Date'] = pd.to_datetime(hist['Date']).dt.date
@@ -95,18 +95,18 @@ class BacktestingEngine:
             total_days = (end_date_val - start_date_val).days
             cagr = (((final_capital / initial_capital) ** (365 / total_days)) - 1) * 100 if total_days > 0 else 0
             
+            equity_df['peak'] = equity_df['equity'].cummax()
+            equity_df['drawdown'] = (equity_df['equity'] - equity_df['peak']) / equity_df['peak'] * 100
+
+            buy_trades = trades_df[trades_df['action'] == 'BUY'].copy() if not trades_df.empty else pd.DataFrame()
+            sell_trades = trades_df[trades_df['action'].str.contains('SELL')].copy() if not trades_df.empty else pd.DataFrame()
+
             if len(equity_df) > 1:
                 equity_df['returns'] = equity_df['equity'].pct_change()
                 daily_returns = equity_df['returns'].dropna()
                 
                 sharpe_ratio = (daily_returns.mean() / daily_returns.std()) * np.sqrt(252) if daily_returns.std() != 0 else 0
-                
-                equity_df['peak'] = equity_df['equity'].cummax()
-                equity_df['drawdown'] = (equity_df['equity'] - equity_df['peak']) / equity_df['peak'] * 100
                 max_drawdown = equity_df['drawdown'].min()
-                
-                buy_trades = trades_df[trades_df['action'] == 'BUY'].copy()
-                sell_trades = trades_df[trades_df['action'].str.contains('SELL')].copy()
                 
                 if len(buy_trades) > 0 and len(sell_trades) > 0:
                     paired_trades = []
@@ -116,10 +116,7 @@ class BacktestingEngine:
                         profit = sell_capital - buy_capital
                         paired_trades.append({'profit': profit, 'is_win': profit > 0})
                     
-                    if paired_trades:
-                        win_rate = sum(1 for t in paired_trades if t['is_win']) / len(paired_trades) * 100
-                    else:
-                        win_rate = 0
+                    win_rate = sum(1 for t in paired_trades if t['is_win']) / len(paired_trades) * 100 if paired_trades else 0
                 else:
                     win_rate = 0
             else:
@@ -128,7 +125,7 @@ class BacktestingEngine:
                 win_rate = 0
                 cagr = 0
             
-            num_trades = len(buy_trades) if 'buy_trades' in locals() else len(trades_df) // 2
+            num_trades = len(buy_trades)
             
             return {
                 'symbol': symbol,
@@ -148,7 +145,7 @@ class BacktestingEngine:
             
         except Exception as e:
             st.error(f"Backtesting error for {symbol}: {str(e)}")
-            return {}
+            return None
     
     def test_ma_crossover_strategy(self, symbol, start_date, end_date, short_window=20, long_window=50, initial_capital=10000):
         """Test Moving Average Crossover Strategy"""
@@ -157,7 +154,7 @@ class BacktestingEngine:
             hist = ticker.history(start=start_date, end=end_date)
             
             if hist.empty:
-                return {}
+                return None
             
             hist['SMA_short'] = hist['Close'].rolling(window=short_window).mean()
             hist['SMA_long'] = hist['Close'].rolling(window=long_window).mean()
@@ -175,6 +172,8 @@ class BacktestingEngine:
             signals.loc[signals['signal'] == 0, 'signal'] = 0
             
             result = self.run_strategy_backtest(symbol, signals, start_date, end_date, initial_capital)
+            if result is None:
+                return None
             result['strategy_name'] = f'MA Crossover ({short_window}/{long_window})'
             result['strategy_params'] = {'short_window': short_window, 'long_window': long_window}
             
@@ -182,7 +181,7 @@ class BacktestingEngine:
             
         except Exception as e:
             st.error(f"MA Crossover backtest error: {str(e)}")
-            return {}
+            return None
     
     def test_rsi_strategy(self, symbol, start_date, end_date, rsi_period=14, oversold=30, overbought=70, initial_capital=10000):
         """Test RSI Mean Reversion Strategy"""
@@ -191,7 +190,7 @@ class BacktestingEngine:
             hist = ticker.history(start=start_date, end=end_date)
             
             if hist.empty:
-                return {}
+                return None
             
             delta = hist['Close'].diff()
             gain = delta.where(delta > 0, 0)
@@ -216,6 +215,8 @@ class BacktestingEngine:
             signals.loc[signals['signal'] == 0, 'signal'] = 0
             
             result = self.run_strategy_backtest(symbol, signals, start_date, end_date, initial_capital)
+            if result is None:
+                return None
             result['strategy_name'] = f'RSI Mean Reversion ({oversold}/{overbought})'
             result['strategy_params'] = {'rsi_period': rsi_period, 'oversold': oversold, 'overbought': overbought}
             
@@ -223,7 +224,7 @@ class BacktestingEngine:
             
         except Exception as e:
             st.error(f"RSI strategy backtest error: {str(e)}")
-            return {}
+            return None
     
     def test_volume_breakout_strategy(self, symbol, start_date, end_date, volume_threshold=1.5, initial_capital=10000):
         """Test Volume Breakout Strategy"""
@@ -232,7 +233,7 @@ class BacktestingEngine:
             hist = ticker.history(start=start_date, end=end_date)
             
             if hist.empty:
-                return {}
+                return None
             
             hist['Volume_MA'] = hist['Volume'].rolling(window=20).mean()
             hist['Volume_Ratio'] = hist['Volume'] / hist['Volume_MA']
@@ -250,6 +251,8 @@ class BacktestingEngine:
             signals.loc[breakdown_condition, 'signal'] = -1
             
             result = self.run_strategy_backtest(symbol, signals, start_date, end_date, initial_capital)
+            if result is None:
+                return None
             result['strategy_name'] = f'Volume Breakout ({volume_threshold}x)'
             result['strategy_params'] = {'volume_threshold': volume_threshold}
             
@@ -257,7 +260,7 @@ class BacktestingEngine:
             
         except Exception as e:
             st.error(f"Volume breakout backtest error: {str(e)}")
-            return {}
+            return None
     
     def test_momentum_strategy(self, symbol, start_date, end_date, lookback_period=20, hold_period=5, initial_capital=10000):
         """Test Momentum Strategy"""
@@ -266,7 +269,7 @@ class BacktestingEngine:
             hist = ticker.history(start=start_date, end=end_date)
             
             if hist.empty:
-                return {}
+                return None
             
             hist['Returns'] = hist['Close'].pct_change(lookback_period)
             
@@ -281,6 +284,8 @@ class BacktestingEngine:
             signals.loc[hist['Returns'] < bottom_quartile, 'signal'] = -1
             
             result = self.run_strategy_backtest(symbol, signals, start_date, end_date, initial_capital)
+            if result is None:
+                return None
             result['strategy_name'] = f'Momentum ({lookback_period}-day)'
             result['strategy_params'] = {'lookback_period': lookback_period, 'hold_period': hold_period}
             
@@ -288,7 +293,7 @@ class BacktestingEngine:
             
         except Exception as e:
             st.error(f"Momentum strategy backtest error: {str(e)}")
-            return {}
+            return None
     
     def compare_strategies(self, results_list):
         """Compare multiple strategy results"""

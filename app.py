@@ -15,6 +15,7 @@ from utils.styles import inject_styles, main_header, data_badge
 
 # Components
 from components.stock_dashboard import StockDashboard
+from components.trade_signals_dashboard import TradeSignalsDashboard
 from components.next_mover_dashboard import NextMoverDashboard
 from components.unified_options import UnifiedOptions
 from components.dark_pool_tracker import DarkPoolTracker
@@ -45,7 +46,7 @@ MINING_STOCKS = {
     'RIOT': 'Riot Platforms Inc',
     'CLSK': 'CleanSpark Inc',
     'HUT':  'Hut 8 Mining Corp',
-    'BITF': 'Bitfarms Ltd',
+    'KEEL': 'Keel Infrastructure Corp.',
     'BTBT': 'Bit Digital Inc',
     'CIFR': 'Cipher Mining Inc',
     'CORZ': 'Core Scientific Inc',
@@ -70,6 +71,10 @@ def get_chart_builder():
 @st.cache_resource
 def get_stock_dashboard():
     return StockDashboard()
+
+@st.cache_resource
+def get_trade_signals():
+    return TradeSignalsDashboard()
 
 @st.cache_resource
 def get_next_mover():
@@ -389,9 +394,10 @@ def main():
 
     _render_command_center(selected_stocks, stock_data, stock_data_available, data_fetcher)
 
-    # ── 10 Tabs ──────────────────────────────────────────────────────────────
+    # ── 12 Tabs ───────────────────────────────────────────────────────────────
     tabs = st.tabs([
         "📊 Market Overview",
+        "🚦 Trade Signals",
         "🎯 AI Predictions",
         "⚡ Options Center",
         "🌊 Institutional Flow",
@@ -402,11 +408,12 @@ def main():
         "🏆 Portfolio",
         "🔬 Strategy Lab",
         "🔄 Reflexivity",
+        "📖 Research",
     ])
 
-    (tab_market, tab_ai, tab_options, tab_flow, tab_ta,
+    (tab_market, tab_signals, tab_ai, tab_options, tab_flow, tab_ta,
      tab_poly, tab_sentiment, tab_risk, tab_portfolio, tab_lab,
-     tab_reflex) = tabs
+     tab_reflex, tab_research) = tabs
 
     # ── 1 · Market Overview ───────────────────────────────────────────────────
     with tab_market:
@@ -420,7 +427,15 @@ def main():
                 except Exception as e:
                     _tab_error("Market Overview", e)
 
-    # ── 2 · AI Predictions ────────────────────────────────────────────────────
+    # ── 2 · Trade Signals ─────────────────────────────────────────────────────
+    with tab_signals:
+        with st.spinner("Computing BUY/HOLD/SELL signals for all 9 stocks…"):
+            try:
+                get_trade_signals().render(data_fetcher, options_analyzer)
+            except Exception as e:
+                _tab_error("Trade Signals", e)
+
+    # ── 3 · AI Predictions ────────────────────────────────────────────────────
     with tab_ai:
         with st.spinner("Running AI prediction engine…"):
             try:
@@ -572,6 +587,19 @@ def main():
                 get_reflexivity().render(selected_stocks, MINING_STOCKS)
             except Exception as e:
                 _tab_error("Reflexivity", e)
+
+    # ── 12 · Research ─────────────────────────────────────────────────────────
+    with tab_research:
+        try:
+            import os, pathlib
+            html_path = pathlib.Path(__file__).parent / "research.html"
+            if html_path.exists():
+                html_content = html_path.read_text(encoding="utf-8")
+                st.components.v1.html(html_content, height=900, scrolling=True)
+            else:
+                st.error("research.html not found.")
+        except Exception as e:
+            _tab_error("Research", e)
 
     # ── Auto-refresh ──────────────────────────────────────────────────────────
     if auto_refresh:

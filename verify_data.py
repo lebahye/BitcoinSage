@@ -3,7 +3,7 @@
 
 import pandas as pd
 from datetime import datetime
-from utils.data_fetcher import DataFetcher
+from utils.unified_data_fetcher import DataFetcher
 
 print('=' * 70)
 print('COMPREHENSIVE DATA VERIFICATION REPORT')

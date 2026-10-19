@@ -1,0 +1,3 @@
+- [GitHub export privacy](github-export-privacy.md) — local history contains portfolio state; publish sanitized snapshots, not the full local ancestry.
+- [No-fake-data rule](no-fake-data.md) — every number must come from live API or real computation; never substitute mock/static values
+- [Options backtester P&L math](options-backtester-pnl.md) — net_income must be sum(cycle_nets), NOT sum(premiums); gross_income tracks premiums separately for yield display

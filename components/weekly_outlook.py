@@ -21,6 +21,86 @@ class WeeklyOutlook:
     
     def render(self, selected_stocks, stock_names):
         """Render forecast center dashboard"""
+        st.title("🔮 Forecast Center")
+        st.markdown("### Weekly · Monthly · Quarterly Price Action Forecasts")
+
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.write("Comprehensive analysis combining technical, sentiment, options flow, and risk data for price predictions.")
+        with col2:
+            time_frame = st.selectbox(
+                "Analysis Period",
+                ["Weekly", "Monthly", "Quarterly"],
+                index=0,
+                help="Choose prediction timeframe"
+            )
+
+        with st.expander("⚠️ Important Disclaimer", expanded=False):
+            st.warning(
+                "**This is not financial advice.** Price predictions are based on technical analysis "
+                "and current market data patterns. Markets are unpredictable and any prediction can be "
+                "wrong. Past performance doesn't guarantee future results. Use this as one input among many."
+            )
+
+        with st.spinner(f"Generating {time_frame} forecasts for {len(selected_stocks)} stocks…"):
+            outlook_data = self.get_forecast_data(selected_stocks, stock_names, time_frame)
+
+        if outlook_data:
+            self._render_sector_summary(outlook_data, time_frame)
+
+            # ── Dual-horizon forecast table ──────────────────────────────
+            st.subheader("🎯 Forecast Table")
+
+            # Always compute both 1-week and 4-week targets regardless of selector
+            weekly_data  = {o['symbol']: o for o in self.get_forecast_data(selected_stocks, stock_names, 'Weekly')}
+            monthly_data = {o['symbol']: o for o in self.get_forecast_data(selected_stocks, stock_names, 'Monthly')}
+
+            def _action_to_signal(action_label: str) -> str:
+                if any(k in action_label for k in ('Accumulate',)):
+                    return '🟢 BUY'
+                if any(k in action_label for k in ('Avoid', 'Hedge', 'Reduce')):
+                    return '🔴 SELL'
+                return '🟡 HOLD'
+
+            table_rows = []
+            for sym in selected_stocks:
+                w = weekly_data.get(sym)
+                m = monthly_data.get(sym)
+                if not w:
+                    continue
+                cur_price = self.data_fetcher.get_stock_data([sym], '1D')
+                cur       = float(cur_price[sym].iloc[-1]) if (cur_price is not None and not cur_price.empty and sym in cur_price.columns) else 0.0
+
+                table_rows.append({
+                    'Symbol':      sym,
+                    'Current':     f"${cur:.2f}" if cur > 0 else "N/A",
+                    '1W Target':   f"${w['price_target']:.2f}",
+                    '4W Target':   f"${m['price_target']:.2f}" if m else "N/A",
+                    'Confidence':  f"{w['confidence']}%",
+                    'Signal':      _action_to_signal(w['action_label']),
+                    'Action':      w['action_label'],
+                    'Score':       f"{w['score']:+.1f}",
+                })
+            table_rows.sort(key=lambda r: float(r['Score'].replace('+', '')), reverse=True)
+
+            table_df = pd.DataFrame(table_rows)
+
+            def _style_signal(row):
+                sig = row['Signal']
+                if '🟢' in sig:
+                    return ['background-color: rgba(0,200,83,0.15)'] * len(row)
+                elif '🔴' in sig:
+                    return ['background-color: rgba(213,0,0,0.15)'] * len(row)
+                return ['background-color: rgba(255,214,0,0.06)'] * len(row)
+
+            st.dataframe(table_df.style.apply(_style_signal, axis=1),
+                         use_container_width=True, hide_index=True)
+
+            st.subheader("📊 Individual Stock Outlooks")
+            for outlook in sorted(outlook_data, key=lambda x: x['score'], reverse=True):
+                self._render_stock_outlook(outlook)
+        else:
+            st.error("Unable to generate outlook data. Please refresh the page.")
 
     def get_forecast_data(self, selected_stocks, stock_names, time_frame='Weekly'):
         """Public forecast API for app-level consensus / decision summary."""
@@ -42,64 +122,7 @@ class WeeklyOutlook:
             if outlook:
                 outlook_data.append(outlook)
         return outlook_data
-        
-        # Time period selector
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.subheader("🔮 Forecast Center")
-            data_lineage_panel(["<strong>Direct:</strong> Yahoo Finance price + volume inputs", "<strong>Proxy:</strong> options-flow score uses price/volatility proxy when full options context is unavailable", "<strong>Estimated:</strong> combined outlook score and price target are model outputs", "<strong>Use:</strong> directional framework, not a guarantee"], title="Weekly Outlook Data Quality")
-            freshness_note("Price/volume snapshot fetched at render time", "model outputs may remain valid longer than raw quotes")
-            st.write("Comprehensive analysis combining all data sources for intelligent price predictions.")
-        
-        with col2:
-            time_frame = st.selectbox(
-                "Analysis Period",
-                ["Weekly", "Monthly", "Quarterly"],
-                index=0,
-                help="Choose prediction timeframe"
-            )
-        
-        # Dynamic title based on selection
-        period_emoji = "📅" if time_frame == "Weekly" else "📆" if time_frame == "Monthly" else "🗓️"
-        st.markdown(f"### {period_emoji} {time_frame} Price Action Forecast")
-        
-        # Disclaimer
-        with st.expander("⚠️ Important Disclaimer", expanded=False):
-            st.warning("""
-            **This is not financial advice.** Price predictions are based on technical analysis and current market data patterns. 
-            Markets are unpredictable and any prediction can be wrong. Past performance doesn't guarantee future results.
-            Use this analysis as one factor among many in your trading decisions.
-            """)
-        
-        outlook_data = self.get_forecast_data(selected_stocks, stock_names, time_frame)
-        
-        if outlook_data:
-            # Summary overview
-            self._render_sector_summary(outlook_data, time_frame)
 
-            st.subheader("🎯 Forecast Table")
-            table_df = pd.DataFrame([
-                {
-                    'Symbol': x['symbol'],
-                    'Direction': x['direction'],
-                    'Confidence': f"{x['confidence']}%",
-                    'Target': f"${x['price_target']:.2f}",
-                    'Range': f"${x['range_low']:.2f} - ${x['range_high']:.2f}",
-                    'Action': x['action_label'],
-                    'Score': f"{x['score']:+.1f}",
-                }
-                for x in sorted(outlook_data, key=lambda x: x['score'], reverse=True)
-            ])
-            st.dataframe(table_df, use_container_width=True, hide_index=True)
-            
-            # Individual stock outlooks
-            st.subheader("📊 Individual Stock Outlooks")
-            for outlook in outlook_data:
-                self._render_stock_outlook(outlook)
-        else:
-            st.error("Unable to generate outlook data. Please try refreshing.")
-    
     def _analyze_stock_outlook(self, symbol, company_name, time_frame, technical_data, sentiment_data, risk_data, market_data):
         """Analyze individual stock for weekly/monthly outlook"""
         try:

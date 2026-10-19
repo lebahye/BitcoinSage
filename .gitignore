@@ -1,0 +1,20 @@
+# Local credentials and configuration
+.env
+.env.*
+!.env.example
+*token*.json
+schwab_token.json
+
+# Local portfolio state
+portfolio_targets.json
+data/
+
+# Generated/runtime files
+__pycache__/
+*.py[cod]
+.cache/
+.pythonlibs/
+.local/
+.upm/
+.config/
+.streamlit/secrets.toml

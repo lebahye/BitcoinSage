@@ -8,6 +8,8 @@ This is a comprehensive financial analytics application built with Streamlit tha
 
 Preferred communication style: Simple, everyday language.
 
+**Data policy: No mock, fake, static, or placeholder data is permitted anywhere in the app. Every number displayed must come from a live API call or real computation on live data. If a data source is unavailable, show a clear error — never substitute fake values silently.**
+
 ## System Architecture
 
 ### Frontend Architecture
