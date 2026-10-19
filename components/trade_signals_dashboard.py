@@ -21,17 +21,8 @@ _SIGNAL_COLORS = {
     'SELL': ('#d50000', '🔴'),
 }
 
-_COMPANY_NAMES = {
-    'RIOT': 'Riot Platforms',
-    'MARA': 'Marathon Digital',
-    'CLSK': 'CleanSpark',
-    'HUT':  'Hut 8 Mining',
-    'IREN': 'Iris Energy',
-    'KEEL': 'Keel Infrastructure',
-    'BTBT': 'Bit Digital',
-    'WULF': 'TeraWulf',
-    'CIFR': 'Cipher Mining',
-}
+from utils.tickers import MINING_STOCKS as _ALL_NAMES, WATCHLIST as _WATCHLIST
+_COMPANY_NAMES = {s: _ALL_NAMES.get(s, s) for s in _WATCHLIST}
 
 
 class TradeSignalsDashboard:

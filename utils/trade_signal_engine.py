@@ -24,10 +24,11 @@ import numpy as np
 import yfinance as yf
 from datetime import datetime
 from utils.sentiment_analyzer import SentimentAnalyzer
+from utils.tickers import WATCHLIST
 
 
 class TradeSignalEngine:
-    MINING_STOCKS = ['RIOT', 'MARA', 'CLSK', 'HUT', 'IREN', 'KEEL', 'BTBT', 'WULF', 'CIFR']
+    MINING_STOCKS = list(WATCHLIST)
     CACHE_TTL = 300  # seconds (5 min)
 
     def __init__(self):

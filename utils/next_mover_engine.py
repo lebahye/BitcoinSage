@@ -11,6 +11,7 @@ from utils.unified_data_fetcher import DataFetcher
 from utils.advanced_ta import AdvancedTA
 from utils.options_analytics import OptionsAnalytics as OptionsAnalyzer
 from utils.sentiment_analyzer import SentimentAnalyzer
+from utils.tickers import WATCHLIST
 
 
 class NextMoverEngine:
@@ -24,7 +25,7 @@ class NextMoverEngine:
         self._ohlcv_cache = {}
         
         # All 9 mining stocks in user's portfolio
-        self.mining_stocks = ['RIOT', 'MARA', 'CLSK', 'HUT', 'IREN', 'KEEL', 'BTBT', 'WULF', 'CIFR']
+        self.mining_stocks = list(WATCHLIST)
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 

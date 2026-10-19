@@ -56,3 +56,12 @@ Streamlit `AppTest` against live Yahoo Finance data and records uncaught excepti
 - `components/reflexivity_dashboard.py`: blockchain.info returns `[{"x":..,"y":..}]` but the parser expected pairs → hashrate and
   difficulty were *always* empty. Fixed; estimated breakeven (labelled as an estimate with its assumptions) now shows ≈ $76,000.
 - Smoke result: 0 exceptions, **0 error boxes** (baseline had 3). ✅
+
+### Step 3 — Centralize tickers and the BITF → KEEL rename (Priority B)
+- New `utils/tickers.py`: `TICKER_ALIASES` (`BITF → KEEL`), `MINING_STOCKS` (sidebar), `WATCHLIST` (9-stock engines),
+  `CORRELATION_UNIVERSE` (peer groups for the RIOT map), `resolve*()` helpers. New `tests/test_tickers.py` (4 tests).
+- `app.py`, `utils/trade_signal_engine.py`, `utils/next_mover_engine.py`, `components/trade_signals_dashboard.py` now import
+  from it (3 duplicated lists removed).
+- `components/personal_portfolio.py`: saved positions, targets and stop-losses are passed through `resolve_keys`, so a local
+  `data/positions.json` on Replit that still says `BITF` is shown as `KEEL` (share counts untouched; nothing invented).
+- Smoke: 9 tests pass, 0 exceptions, 0 error boxes. ✅

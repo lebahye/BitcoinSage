@@ -7,6 +7,7 @@ import json
 import os
 from datetime import datetime, timedelta
 from utils.unified_data_fetcher import DataFetcher
+from utils.tickers import resolve, resolve_keys
 
 TARGETS_FILE = "portfolio_targets.json"
 STOP_LOSS_FILE = "portfolio_stop_loss.json"
@@ -48,7 +49,7 @@ class PersonalPortfolio:
                 with open(TARGETS_FILE, "r") as f:
                     data = json.load(f)
                 if isinstance(data, dict):
-                    return {k: float(v) for k, v in data.items()}
+                    return resolve_keys({k: float(v) for k, v in data.items()})
         except Exception:
             pass
         return {}
@@ -70,7 +71,7 @@ class PersonalPortfolio:
                 with open(STOP_LOSS_FILE, "r") as f:
                     data = json.load(f)
                 if isinstance(data, dict):
-                    return {k: float(v) for k, v in data.items()}
+                    return resolve_keys({k: float(v) for k, v in data.items()})
         except Exception:
             pass
         return {}
@@ -136,7 +137,7 @@ class PersonalPortfolio:
                     data = json.load(f)
                 if isinstance(data, dict) and data:
                     result = {}
-                    for symbol, saved in data.items():
+                    for symbol, saved in resolve_keys(data).items():  # e.g. old BITF -> KEEL
                         default = _DEFAULT_POSITIONS.get(symbol, {})
                         result[symbol] = {
                             'shares':     int(saved.get('shares', default.get('shares', 0))),

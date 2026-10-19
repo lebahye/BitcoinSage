@@ -41,18 +41,7 @@ st.set_page_config(
 
 # ─── Mining stocks ───────────────────────────────────────────────────────────
 
-MINING_STOCKS = {
-    'MARA': 'Marathon Digital Holdings',
-    'RIOT': 'Riot Platforms Inc',
-    'CLSK': 'CleanSpark Inc',
-    'HUT':  'Hut 8 Mining Corp',
-    'KEEL': 'Keel Infrastructure Corp.',
-    'BTBT': 'Bit Digital Inc',
-    'CIFR': 'Cipher Mining Inc',
-    'CORZ': 'Core Scientific Inc',
-    'IREN': 'Iris Energy Ltd',
-    'WULF': 'TeraWulf Inc',
-}
+from utils.tickers import MINING_STOCKS, WATCHLIST  # single source of truth (incl. BITF→KEEL rename)
 
 # ─── Cached component instances (survive reruns, init once per session) ──────
 
