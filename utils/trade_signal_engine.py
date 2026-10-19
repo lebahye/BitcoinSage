@@ -23,7 +23,6 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 from datetime import datetime
-from utils.sentiment_analyzer import SentimentAnalyzer
 from utils.tickers import WATCHLIST
 
 
@@ -32,7 +31,6 @@ class TradeSignalEngine:
     CACHE_TTL = 300  # seconds (5 min)
 
     def __init__(self):
-        self.sentiment_analyzer = SentimentAnalyzer()
         self._cache: dict = {}          # key → (value, epoch_time)
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -59,78 +57,39 @@ class TradeSignalEngine:
     # Data helpers
     # ──────────────────────────────────────────────────────────────────────────
 
-    def _get_ohlcv(self, symbol: str, period: str = '3mo') -> pd.DataFrame:
-        key = f"ohlcv_{symbol}_{period}"
-        cached = self._cache_get(key)
-        if cached is not None:
-            return cached
-        try:
-            hist = yf.Ticker(symbol).history(period=period, interval='1d', auto_adjust=True)
-            self._cache_set(key, hist)
-            return hist
-        except Exception:
-            return pd.DataFrame()
+    def _get_ohlcv(self, symbol: str, period: str = None) -> pd.DataFrame:
+        """Daily OHLCV from the shared signal hub (same data every tab uses)."""
+        from utils.signal_hub import get_ohlcv
+        return get_ohlcv(symbol)
 
     def _get_btc_data(self) -> pd.DataFrame:
-        key = "btc_ohlcv"
-        cached = self._cache_get(key)
-        if cached is not None:
-            return cached
-        try:
-            btc = yf.Ticker("BTC-USD").history(period='10d', interval='1d', auto_adjust=True)
-            self._cache_set(key, btc)
-            return btc
-        except Exception:
-            return pd.DataFrame()
+        from utils.signal_hub import get_ohlcv
+        btc = get_ohlcv("BTC-USD")
+        return btc.tail(10) if not btc.empty else btc
 
-    def _get_sentiment_score(self, symbol: str) -> float:
-        key = f"sentiment_{symbol}"
-        cached = self._cache_get(key)
-        if cached is not None:
-            return cached
-        try:
-            raw = self.sentiment_analyzer.get_news_sentiment([symbol], limit=20)
-            if 'error' in raw:
-                self._cache_set(key, 0.0)
-                return 0.0
-            df = self.sentiment_analyzer.parse_sentiment_data(raw, ticker=symbol)
-            agg = self.sentiment_analyzer.get_aggregate_sentiment(df, ticker=symbol)
-            score = float(np.clip(agg.get('avg_sentiment', 0.0), -1.0, 1.0))
-            self._cache_set(key, score)
-            return score
-        except Exception:
-            self._cache_set(key, 0.0)
-            return 0.0
+    def _get_sentiment_score(self, symbol: str):
+        """News tone in [-1, 1] from the shared news module, or None if unavailable
+        (then sentiment simply isn't scored — no fake neutral)."""
+        from utils.news_sentiment import news_sentiment
+        r = news_sentiment(symbol)
+        return float(np.clip(r["score"], -1.0, 1.0)) if r.get("available") else None
 
     # ──────────────────────────────────────────────────────────────────────────
     # Technical indicators
     # ──────────────────────────────────────────────────────────────────────────
 
-    def _calc_rsi(self, close: pd.Series, period: int = 14) -> float:
-        """Wilder's RSI using EWM (alpha = 1/period) — correct formula."""
-        delta = close.diff()
-        gain = delta.where(delta > 0, 0.0)
-        loss = (-delta.where(delta < 0, 0.0))
-        avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
-        avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
-        rs = avg_gain / avg_loss.replace(0, np.nan)
-        rsi = 100 - (100 / (1 + rs))
-        val = rsi.iloc[-1]
-        return float(val) if pd.notna(val) else 50.0
+    def _calc_rsi(self, close: pd.Series, period: int = 14):
+        """Wilder's RSI from the shared indicators module. None if too little data."""
+        from utils.indicators import rsi
+        return rsi(close, period)
 
     def _calc_macd(self, close: pd.Series):
-        """Return (macd_line, signal_line, histogram_now, histogram_prev)."""
-        ema12 = close.ewm(span=12, adjust=False).mean()
-        ema26 = close.ewm(span=26, adjust=False).mean()
-        macd = ema12 - ema26
-        signal = macd.ewm(span=9, adjust=False).mean()
-        hist = macd - signal
-        return (
-            float(macd.iloc[-1]) if not macd.empty else 0.0,
-            float(signal.iloc[-1]) if not signal.empty else 0.0,
-            float(hist.iloc[-1]) if not hist.empty else 0.0,
-            float(hist.iloc[-2]) if len(hist) > 1 else 0.0,
-        )
+        """Return (macd_line, signal_line, histogram_now, histogram_prev) — shared formula."""
+        from utils.indicators import macd
+        m = macd(close)
+        if m is None:
+            return 0.0, 0.0, 0.0, 0.0
+        return m["line"], m["signal"], m["hist"], m["hist_prev"]
 
     def _calc_atr(self, hist: pd.DataFrame, period: int = 14) -> float:
         """Wilder's ATR using EWM."""
@@ -144,29 +103,19 @@ class TradeSignalEngine:
         return float(val) if pd.notna(val) else float((h - l).mean())
 
     def _calc_bollinger(self, close: pd.Series, period: int = 20, n_std: float = 2.0):
-        """Return (pct_b, upper, middle, lower). %B=0 at lower, 1 at upper."""
-        ma = close.rolling(period).mean()
-        sd = close.rolling(period).std()
-        upper = ma + n_std * sd
-        lower = ma - n_std * sd
-        cur = close.iloc[-1]
-        bw = upper.iloc[-1] - lower.iloc[-1]
-        pct_b = (cur - lower.iloc[-1]) / bw if bw > 0 else 0.5
-        return float(pct_b), float(upper.iloc[-1]), float(ma.iloc[-1]), float(lower.iloc[-1])
+        """Return (pct_b, upper, middle, lower) from the shared indicators module."""
+        from utils.indicators import bollinger
+        bb = bollinger(close, period, n_std)
+        if bb is None or bb["pct_b"] is None:
+            c = float(close.iloc[-1])
+            return 0.5, c, c, c   # flat band: price is mid-band by definition
+        return bb["pct_b"], bb["upper"], bb["middle"], bb["lower"]
 
     def _calc_stochastic(self, hist: pd.DataFrame, k_period: int = 14, d_period: int = 3):
-        """Return (%K, %D)."""
-        low_min = hist['Low'].rolling(k_period).min()
-        high_max = hist['High'].rolling(k_period).max()
-        denom = (high_max - low_min).replace(0, np.nan)
-        k = 100 * (hist['Close'] - low_min) / denom
-        d = k.rolling(d_period).mean()
-        k_val = k.iloc[-1]
-        d_val = d.iloc[-1]
-        return (
-            float(k_val) if pd.notna(k_val) else 50.0,
-            float(d_val) if pd.notna(d_val) else 50.0,
-        )
+        """Return (%K, %D) from the shared indicators module (50/50 only for a zero-range window)."""
+        from utils.indicators import stochastic
+        v = stochastic(hist, k_period, d_period)
+        return v if v is not None else (50.0, 50.0)
 
     def _calc_obv_slope(self, hist: pd.DataFrame, window: int = 10) -> float:
         """Normalised OBV slope over last `window` bars. Positive = accumulation."""
@@ -454,7 +403,9 @@ class TradeSignalEngine:
             reasons.append(f"{pct_vs_50ma:.1f}% above 50-day MA — very extended")
 
         # ── Sentiment ─────────────────────────────────────────────────────────
-        if sentiment_score >= 0.3:
+        if sentiment_score is None:
+            reasons.append("News tone unavailable — not scored")
+        elif sentiment_score >= 0.3:
             score += 14
             reasons.append(f"News sentiment strongly bullish ({sentiment_score:+.2f})")
         elif sentiment_score >= 0.1:
@@ -509,24 +460,17 @@ class TradeSignalEngine:
 
     def analyze_stock(self, symbol: str) -> dict:
         hist = self._get_ohlcv(symbol)
-        cache_age = self._cache_age(f"ohlcv_{symbol}_3mo")
 
         if hist.empty or len(hist) < 30:
-            return {
-                'symbol': symbol, 'signal': 'HOLD', 'confidence': 40,
-                'error': 'Insufficient data', 'rsi': 50.0, 'macd_direction': 'Neutral',
-                'volume_ratio': 1.0, 'sentiment_score': 0.0, 'sentiment_label': 'Neutral',
-                'reasons': ['Insufficient data for analysis'], 'price_targets': None,
-                'current_price': 0.0, 'data_age_seconds': cache_age,
-                'stoch_k': 50.0, 'stoch_d': 50.0, 'pct_b': 0.5, 'obv_slope': 0.0,
-                'atr': 0.0, 'btc_factors': {}, 'ma50_slope': 0.0,
-            }
+            return self._unavailable(symbol, 'Insufficient price data from Yahoo Finance')
 
         close  = hist['Close']
         volume = hist['Volume']
 
         # All indicators
         rsi                      = self._calc_rsi(close)
+        if rsi is None:
+            return self._unavailable(symbol, 'Not enough history for RSI')
         macd_val, sig_val, macd_hist, macd_hist_prev = self._calc_macd(close)
         volume_ratio             = self._calc_volume_ratio(volume)
         pct_vs_20ma, pct_vs_50ma, ma50_slope = self._calc_moving_averages(close)
@@ -551,7 +495,9 @@ class TradeSignalEngine:
         )
 
         # Labels
-        if sentiment_score >= 0.15:
+        if sentiment_score is None:
+            sentiment_label = "n/a"
+        elif sentiment_score >= 0.15:
             sentiment_label = "🟢 Bullish"
         elif sentiment_score <= -0.15:
             sentiment_label = "🔴 Bearish"
@@ -589,14 +535,14 @@ class TradeSignalEngine:
             'stoch_d': round(stoch_d, 1),
             'obv_slope': round(obv_slope, 3),
             'atr': round(atr, 2),
-            'sentiment_score': round(sentiment_score, 3),
+            'sentiment_score': round(sentiment_score, 3) if sentiment_score is not None else None,
             'sentiment_label': sentiment_label,
             'btc_factors': btc_factors,
             'in_downtrend': classification['in_downtrend'],
             'in_uptrend': classification['in_uptrend'],
             'price_targets': price_targets,
             'data_timestamp': datetime.now().strftime('%H:%M:%S'),
-            'data_age_seconds': int(cache_age) if cache_age != float('inf') else 0,
+            'as_of': close.index[-1].date(),
         }
 
     def analyze_all(self) -> list:
@@ -605,19 +551,21 @@ class TradeSignalEngine:
             try:
                 results.append(self.analyze_stock(symbol))
             except Exception as e:
-                results.append({
-                    'symbol': symbol, 'signal': 'HOLD', 'confidence': 40,
-                    'error': str(e), 'rsi': 50.0, 'macd_direction': 'Unknown',
-                    'volume_ratio': 1.0, 'sentiment_score': 0.0,
-                    'sentiment_label': '🟡 Neutral', 'reasons': [f'Error: {e}'],
-                    'price_targets': None, 'current_price': 0.0,
-                    'pct_b': 0.5, 'stoch_k': 50.0, 'stoch_d': 50.0,
-                    'obv_slope': 0.0, 'atr': 0.0, 'btc_factors': {},
-                    'ma50_slope': 0.0, 'daily_return_pct': 0.0,
-                    'data_timestamp': datetime.now().strftime('%H:%M:%S'),
-                    'data_age_seconds': 0,
-                })
+                results.append(self._unavailable(symbol, f'Error: {e}'))
 
-        order = {'BUY': 0, 'HOLD': 1, 'SELL': 2}
-        results.sort(key=lambda x: (order.get(x['signal'], 1), -x.get('confidence', 0)))
+        order = {'BUY': 0, 'HOLD': 1, 'SELL': 2, 'N/A': 3}
+        results.sort(key=lambda x: (order.get(x['signal'], 3), -(x.get('confidence') or 0)))
         return results
+
+    @staticmethod
+    def _unavailable(symbol: str, why: str) -> dict:
+        """Honest 'no signal' result — no fake HOLD, no fake RSI 50."""
+        return {
+            'symbol': symbol, 'signal': 'N/A', 'confidence': None, 'raw_score': None, 'error': why,
+            'reasons': [why], 'current_price': None, 'daily_return_pct': None, 'rsi': None,
+            'macd_direction': 'n/a', 'macd_hist': None, 'volume_ratio': None, 'pct_vs_20ma': None,
+            'pct_vs_50ma': None, 'ma50_slope': None, 'pct_b': None, 'bb_upper': None, 'bb_lower': None,
+            'stoch_k': None, 'stoch_d': None, 'obv_slope': None, 'atr': None, 'sentiment_score': None,
+            'sentiment_label': 'n/a', 'btc_factors': {}, 'in_downtrend': False, 'in_uptrend': False,
+            'price_targets': None, 'data_timestamp': datetime.now().strftime('%H:%M:%S'), 'as_of': None,
+        }

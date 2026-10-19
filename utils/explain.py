@@ -193,6 +193,9 @@ GLOSSARY = {
     ),
 }
 
+from utils.explain_signals import SIGNAL_GLOSSARY  # noqa: E402  (signals / news / forecast help)
+GLOSSARY.update(SIGNAL_GLOSSARY)
+
 HELP = {k: v[1].replace("**", "") for k, v in GLOSSARY.items()}
 
 

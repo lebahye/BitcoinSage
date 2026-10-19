@@ -19,6 +19,7 @@ _SIGNAL_COLORS = {
     'BUY':  ('#00c853', '🟢'),
     'HOLD': ('#ffd600', '🟡'),
     'SELL': ('#d50000', '🔴'),
+    'N/A':  ('#90a4ae', '⚪'),
 }
 
 from utils.tickers import MINING_STOCKS as _ALL_NAMES, WATCHLIST as _WATCHLIST
@@ -44,15 +45,13 @@ class TradeSignalsDashboard:
             return
 
         # ── Data freshness banner ─────────────────────────────────────────────
-        ages = [r.get('data_age_seconds', 0) for r in results if r.get('data_age_seconds', 0) > 0]
-        max_age = max(ages) if ages else 0
-        ts = results[0].get('data_timestamp', 'N/A')
-        if max_age < 60:
-            st.success(f"✅ Data fresh — analyzed at {ts}  (cache < 1 min old)")
-        elif max_age < 300:
-            st.info(f"ℹ️ Data from {ts}  ({max_age // 60}m {max_age % 60}s ago — refreshes every 5 min)")
-        else:
-            st.warning(f"⏰ Data may be stale ({max_age // 60} min old) — consider refreshing")
+        as_of = max((r['as_of'] for r in results if r.get('as_of')), default=None)
+        n_na = sum(1 for r in results if r['signal'] == 'N/A')
+        if as_of:
+            st.caption(f"📅 Based on daily closes up to **{as_of}** (Yahoo Finance, shared with every tab; "
+                       f"refreshed every 15 min). Analyzed at {results[0].get('data_timestamp', '')}.")
+        if n_na:
+            st.warning(f"⚪ {n_na} stock(s) have no signal right now (price data unavailable) — shown as N/A, not HOLD.")
 
         # ── BTC context banner ────────────────────────────────────────────────
         btc = results[0].get('btc_factors', {})
@@ -63,7 +62,7 @@ class TradeSignalsDashboard:
         # ── 1. ACTION REQUIRED NOW ────────────────────────────────────────────
         high_conviction = [
             r for r in results
-            if r['signal'] in ('BUY', 'SELL') and r.get('confidence', 0) >= 60
+            if r['signal'] in ('BUY', 'SELL') and (r.get('confidence') or 0) >= 60
         ]
 
         if high_conviction:
@@ -98,7 +97,7 @@ class TradeSignalsDashboard:
         with c3:
             st.metric("🔴 SELL / Short", len(sells), help="Overbought or momentum reversing")
         with c4:
-            top = results[0] if results else None
+            top = results[0] if results and results[0]['signal'] != 'N/A' else None
             if top:
                 st.metric(
                     "🏆 Best Setup",
@@ -144,7 +143,7 @@ class TradeSignalsDashboard:
 | Volume (direction-aware) | ±20 | Surge on UP day = buy; surge on DOWN day = sell |
 | Bollinger %B | ±14 | Price position within the band |
 | OBV slope | ±10 | Smart-money accumulation / distribution |
-| News Sentiment | ±14 | Alpha Vantage, 20 headlines |
+| News tone | ±14 | Headline tone from 📰 Sentiment & News (not scored if unavailable) |
 | BTC momentum | ±20 | BTC 1-day change is the key miner catalyst |
 
 **Thresholds:** Score ≥ 28 → **BUY** · Score ≤ -20 → **SELL** · Between → **HOLD**  
@@ -153,7 +152,8 @@ In strong downtrends (50-MA falling > 2.5% in 10 days), BUY threshold rises to 4
 **Stops:** 2× ATR below entry (not a flat percentage).  
 **Targets:** the next two Fibonacci levels above entry from the 60-day swing (retracements below the high, 127.2%/161.8% extensions above it).
 
-**Data:** Yahoo Finance daily bars, refreshed every 5 minutes.  
+**Data:** Yahoo Finance daily bars from the shared data hub (the same prices and RSI as 🧭 My Plan and 📈 Technical Analysis), refreshed every 15 minutes.  
+**Confidence %** is how far the score is past the BUY/SELL threshold, rescaled to 50–95. It is **not** a probability and these short-term rules have **not** been backtested — only My Plan's rules have a track record.  
 ⚠️ Signals are analytical tools, not financial advice. Verify before trading.
 """)
 
@@ -281,6 +281,11 @@ In strong downtrends (50-MA falling > 2.5% in 10 days), BUY threshold rises to 4
         for r in results:
             color, emoji = _SIGNAL_COLORS[r['signal']]
             sig_display = f"{emoji} {r['signal']}"
+            if r['signal'] == 'N/A':
+                rows.append({'Ticker': r['symbol'], 'Price': 'n/a', 'Today': 'n/a', 'Signal': sig_display,
+                             'Conf': 'n/a', 'RSI': 'n/a', 'Stoch': 'n/a', 'BB%B': 'n/a', 'Vol': 'n/a',
+                             'OBV': 'n/a', 'R/R': 'n/a', 'Top Reason': r.get('error', 'No data')})
+                continue
             conf = r.get('confidence', 50)
 
             rsi = r.get('rsi', 50)
@@ -299,9 +304,6 @@ In strong downtrends (50-MA falling > 2.5% in 10 days), BUY threshold rises to 4
 
             obv = r.get('obv_slope', 0)
             obv_display = f"{'📈' if obv > 0.15 else ('📉' if obv < -0.15 else '—')} {obv:+.2f}"
-
-            btc = r.get('btc_factors', {})
-            btc_display = btc.get('btc_label', 'N/A')
 
             pt = r.get('price_targets', {}) or {}
             rr_display = f"{pt.get('risk_reward', 0):.1f}:1" if pt else "N/A"
@@ -345,6 +347,10 @@ In strong downtrends (50-MA falling > 2.5% in 10 days), BUY threshold rises to 4
         symbol  = r['symbol']
         signal  = r['signal']
         color, emoji = _SIGNAL_COLORS[signal]
+        if signal == 'N/A':
+            with st.expander(f"⚪ **{symbol}** — no signal ({r.get('error', 'no data')})"):
+                st.info("No price data right now, so no signal is shown. Try 🔄 Refresh Data in a minute.")
+            return
         conf    = r.get('confidence', 50)
         cur     = r.get('current_price', 0)
         daily   = r.get('daily_return_pct', 0)
@@ -474,6 +480,7 @@ In strong downtrends (50-MA falling > 2.5% in 10 days), BUY threshold rises to 4
     # ──────────────────────────────────────────────────────────────────────────
 
     def _render_signal_strength_chart(self, results: list):
+        results = [r for r in results if r.get('raw_score') is not None]
         symbols = [r['symbol'] for r in results]
         scores  = [r.get('raw_score', 0) for r in results]
         confs   = [r.get('confidence', 50) for r in results]

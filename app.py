@@ -279,7 +279,7 @@ def main():
 2. **🏆 Portfolio** — enter or edit your shares, cost basis and target prices. Everything else uses these numbers.
 3. **🔗 RIOT Correlation Map** — what really moves your RIOT shares (other miners, AI stocks, Bitcoin, market fear).
 4. **⚠️ Risk Center** and **🔄 Reflexivity** — how bad a Bitcoin crash could hit you, and where we are in the boom/bust cycle.
-5. The remaining tabs (Trade Signals, AI Predictions, Options, Flow, Technicals, Sentiment, Polymarket) are
+5. The remaining tabs (Trade Signals, Next-Mover Ranking, Options, Flow, Technicals, Sentiment, Polymarket) are
    **short-term trading tools**. As a long-term holder you can mostly ignore them.
 
 Hover over the small ⓘ next to any number, or open an "ℹ️ What is this?" box, for a plain-English explanation.
@@ -299,7 +299,7 @@ Nothing here is financial advice.
         "🔄 Reflexivity",
         "🔬 Strategy Lab",
         "🚦 Trade Signals",
-        "🎯 AI Predictions",
+        "🎯 Next-Mover Ranking",
         "⚡ Options Center",
         "🌊 Institutional Flow",
         "📈 Technical Analysis",
@@ -351,14 +351,14 @@ Nothing here is financial advice.
             except Exception as e:
                 _tab_error("Trade Signals", e)
 
-    # ── 3 · AI Predictions ────────────────────────────────────────────────────
+    # ── 3 · Next-Mover Ranking (rules-based; was mislabelled "AI Predictions") ────────────────────────────────────────────────────
     if tab_ai:
         st.caption("⏱️ Short-term trading tool (days to weeks). Your long-term Hold/Sell call lives in 🧭 My Plan.")
-        with st.spinner("Running AI prediction engine…"):
+        with st.spinner("Ranking the 9 miners…"):
             try:
                 get_next_mover().render(data_fetcher, options_analyzer)
             except Exception as e:
-                _tab_error("AI Predictions", e)
+                _tab_error("Next-Mover Ranking", e)
 
     # ── 3 · Options Center ────────────────────────────────────────────────────
     if tab_options:

@@ -41,8 +41,12 @@ class SentimentAnalyzer:
                 if 'Error Message' in data:
                     return {'error': data['Error Message']}
                 
-                if 'Note' in data:
-                    return {'error': 'API rate limit reached', 'message': data['Note']}
+                # Alpha Vantage signals rate limits / bad keys with 'Note' (old) or
+                # 'Information' (current) and NO feed — previously this slipped through
+                # as an empty feed and was shown as a silent 'Neutral 0.0'.
+                for k in ('Note', 'Information'):
+                    if k in data and 'feed' not in data:
+                        return {'error': 'API rate limit reached or key rejected', 'message': data[k]}
                 
                 return data
             else:

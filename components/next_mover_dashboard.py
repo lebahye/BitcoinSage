@@ -19,13 +19,17 @@ class NextMoverDashboard:
     
     def render(self, data_fetcher, options_analyzer):
         """Render the Next Mover Prediction dashboard"""
-        st.title("🎯 Next Mover Prediction Engine")
-        st.markdown("*Which mining stock has the best setup to move next?*")
+        st.title("🎯 Next-Mover Ranking")
+        st.markdown("*Which mining stock has the best short-term setup right now?*")
+        st.info("ℹ️ **What this is (plainly):** a rules-based ranking — a weighted score of relative strength, "
+                "technical indicators, Bitcoin beta and (when available) news tone. **It is not artificial intelligence "
+                "or machine learning**, the score is **not a probability**, and these rules have **not** been backtested. "
+                "Use it to see which miners look strongest/weakest this week; for your long-term decision use 🧭 My Plan.")
 
         # Get predictions
         with st.spinner("Fetching live market data for all 9 stocks…"):
             rankings = self.engine.calculate_composite_score()
-            top_pick = self.engine.get_top_pick()
+            top_pick = self.engine.get_top_pick(rankings) if not rankings.empty else None
 
         if rankings.empty:
             st.error("Unable to fetch market data. Please try again.")
@@ -34,13 +38,11 @@ class NextMoverDashboard:
         # ── Data quality banner ───────────────────────────────────────────────
         any_sent_live = rankings['Sentiment Live'].any() if 'Sentiment Live' in rankings.columns else False
         if any_sent_live:
-            st.success("✅ All data sources live — Technical, Relative Strength, BTC Correlation, and News Sentiment are from real-time data.")
+            st.success("✅ All four factors live — Technical, Relative Strength, BTC beta and News tone.")
         else:
             st.warning(
-                "⚠️ **News Sentiment is unavailable** (Alpha Vantage free-tier limit reached for today). "
-                "Sentiment is shown as Neutral (50) for all stocks — it does not affect the relative ranking "
-                "since every stock gets the same default. The other 3 factors (Relative Strength, Technical, BTC) "
-                "are fully live."
+                "⚠️ **News tone is unavailable right now**, so the ranking uses only the 3 price-based factors "
+                "(Relative Strength, Technical, BTC), re-weighted to 100%. Nothing is filled in with a made-up neutral score."
             )
 
         # ── How scores work ───────────────────────────────────────────────────
@@ -53,7 +55,7 @@ class NextMoverDashboard:
             | 🎯 Relative Strength | **30%** | How far behind the sector average the stock is — laggards tend to catch up |
             | 📈 Technical Setup | **40%** | RSI position, MACD direction & momentum, price vs 20/50-day moving averages, volume |
             | ₿ BTC Correlation | **15%** | Whether the stock's beta to Bitcoin is an advantage given where BTC is trending |
-            | 📰 News Sentiment | **15%** | Average sentiment score of recent news articles (Alpha Vantage) |
+            | 📰 News tone | **15%** | Tone of recent headlines (see 📰 Sentiment & News for the headlines and method) |
 
             **Score guide:**
             - **70+** — Strong setup, multiple signals aligned
@@ -62,6 +64,7 @@ class NextMoverDashboard:
             - **Below 50** — Overbought or lagging on most factors
 
             > Scores are *relative to each other* — the point is to rank the 9 stocks, not predict an absolute outcome.
+            > A factor that can't be measured is left out and the others are re-weighted (shown as "n/a").
             """)
 
         st.divider()
@@ -84,7 +87,8 @@ class NextMoverDashboard:
                         "❌ Weak")
                 st.metric("Signal Strength", conf)
             with col3:
-                st.metric("RSI", f"{top_pick['rsi']:.0f}")
+                st.metric("RSI (Wilder 14)", "n/a" if pd.isna(top_pick['rsi']) else f"{top_pick['rsi']:.0f}",
+                          help="Same RSI value as 🚦 Trade Signals, 📈 Technical Analysis and 🧭 My Plan (shared formula).")
                 gap = top_pick.get('performance_gap', 0)
                 st.metric("Behind Sector Avg", f"{gap:+.1f}%",
                           delta="catch-up candidate" if gap > 3 else "near average",
@@ -95,8 +99,8 @@ class NextMoverDashboard:
                     rs  = top_row['RS Score'].iloc[0]
                     tec = top_row['Tech Score'].iloc[0]
                     btc = top_row['BTC Score'].iloc[0]
-                    st.metric("Rel. Strength", f"{rs:.0f}/100")
-                    st.metric("Technical", f"{tec:.0f}/100")
+                    st.metric("Rel. Strength", "n/a" if pd.isna(rs) else f"{rs:.0f}/100")
+                    st.metric("Technical", "n/a" if pd.isna(tec) else f"{tec:.0f}/100")
 
             st.info(f"**Why {top_pick['symbol']}?** {top_pick['signals']}")
 
@@ -139,7 +143,7 @@ class NextMoverDashboard:
             rs      = float(row['RS Score'])
             tec     = float(row['Tech Score'])
             btc     = float(row['BTC Score'])
-            sent    = float(row['Sentiment Score']) if 'Sentiment Score' in row else 50.0
+            sent    = float(row['Sentiment Score']) if 'Sentiment Score' in row else float('nan')
             sent_live = bool(row.get('Sentiment Live', False))
             rsi_val  = float(row['RSI'])
             gap      = float(row['Performance Gap'])
@@ -165,7 +169,7 @@ class NextMoverDashboard:
                 with col1:
                     st.metric(
                         "🎯 Relative Strength",
-                        f"{rs:.0f}/100",
+                        "n/a" if pd.isna(rs) else f"{rs:.0f}/100",
                         help="High = stock is lagging sector and likely to catch up"
                     )
                     catchup = f"Behind avg by {gap:.1f}%" if gap > 0 else f"Ahead of avg by {abs(gap):.1f}%"
@@ -174,10 +178,10 @@ class NextMoverDashboard:
                 with col2:
                     st.metric(
                         "📈 Technical Setup",
-                        f"{tec:.0f}/100",
+                        "n/a" if pd.isna(tec) else f"{tec:.0f}/100",
                         help="RSI position, MACD momentum, price vs moving averages, volume"
                     )
-                    st.caption(f"RSI {rsi_val:.0f}")
+                    st.caption("RSI n/a" if pd.isna(rsi_val) else f"RSI {rsi_val:.0f} (Wilder)")
                     if tech_sigs:
                         for sig in tech_sigs[:2]:
                             st.caption(f"• {sig}")
@@ -196,21 +200,23 @@ class NextMoverDashboard:
                     sent_label_display = (
                         f"{sent_lbl} ({sent:.0f}/100)"
                         if sent_live
-                        else "Neutral — no data today"
+                        else "n/a — unavailable"
                     )
                     st.metric(
-                        "📰 Sentiment",
+                        "📰 News tone",
                         sent_label_display,
-                        help="Alpha Vantage news sentiment. Shows 'Neutral' when daily API limit is reached."
+                        help="Tone of recent headlines (same number as the 📰 Sentiment & News tab). "
+                             "'n/a' = no headlines could be fetched; the factor is then left out, not set to neutral."
                     )
                     if not sent_live:
-                        st.caption("⚠️ API limit — defaulted to 50")
+                        st.caption("Left out of this stock's score (re-weighted)")
 
                 # Composite bar
                 bar_pct = int(score)
                 filled  = "█" * (bar_pct // 5)
                 empty   = "░" * (20 - bar_pct // 5)
-                st.caption(f"Composite  {filled}{empty}  {score:.1f}/100  (RS×30% + Tech×40% + BTC×15% + Sent×15%)")
+                st.caption(f"Composite  {filled}{empty}  {score:.1f}/100  (RS×30% + Tech×40% + BTC×15% + News×15%, "
+                           f"re-weighted over the factors used: {row.get('Factors Used', '')})")
     
     def _render_earnings_calendar(self):
         """Earnings dates, EPS history, and price reaction for all 9 stocks"""

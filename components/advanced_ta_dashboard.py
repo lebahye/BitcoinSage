@@ -490,9 +490,9 @@ class AdvancedTADashboard:
         """Render individual stock technical analysis"""
         
         try:
-            # Get stock data
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(period='6mo')
+            # Shared data hub (same bars as every other tab); show the last ~6 months
+            from utils.signal_hub import get_ohlcv
+            hist = get_ohlcv(symbol).tail(126)
             
             if hist.empty:
                 st.warning(f"No data available for {symbol}")
@@ -539,9 +539,14 @@ class AdvancedTADashboard:
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            rsi = indicators.get('rsi', 50)
-            rsi_signal = "Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Neutral"
-            st.metric("RSI", f"{rsi:.1f}", rsi_signal)
+            rsi = indicators.get('rsi', float('nan'))
+            if pd.isna(rsi):
+                st.metric("RSI (Wilder 14)", "n/a")
+            else:
+                rsi_signal = "Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Neutral"
+                st.metric("RSI (Wilder 14)", f"{rsi:.1f}", rsi_signal,
+                          help="Relative Strength Index: 0–100 gauge of recent up-days vs down-days. Under 30 = "
+                               "'oversold' (sold off hard), over 70 = 'overbought'. Same value as Trade Signals and My Plan.")
         
         with col2:
             macd_signal = indicators.get('macd_signal', 'Neutral')
@@ -647,18 +652,21 @@ class AdvancedTADashboard:
         """Calculate all technical indicators for a symbol"""
         
         try:
+            from utils.signal_hub import get_ohlcv
+            full = get_ohlcv(symbol)
             if hist is None:
-                ticker = yf.Ticker(symbol)
-                hist = ticker.history(period='6mo')
+                hist = full.tail(126)
             
             if hist.empty:
                 return {}
             
             indicators = {}
             
-            # Basic indicators
-            indicators['rsi'] = self._calculate_rsi(hist['Close'])
-            indicators['macd_signal'] = self._calculate_macd_signal(hist['Close'])
+            # Basic indicators — RSI/MACD on the full shared 2-year series so the value
+            # matches Trade Signals, Next-Mover and My Plan exactly.
+            base_close = full['Close'] if not full.empty else hist['Close']
+            indicators['rsi'] = self._calculate_rsi(base_close)
+            indicators['macd_signal'] = self._calculate_macd_signal(base_close)
             indicators['bollinger_signal'] = self._calculate_bollinger_signal(hist['Close'])
             indicators['stochastic'] = self._calculate_stochastic(hist)
             
@@ -687,36 +695,24 @@ class AdvancedTADashboard:
             return {}
     
     def _calculate_rsi(self, prices, window=14):
-        """Calculate RSI"""
-        try:
-            delta = prices.diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-            rs = gain / loss
-            rsi = 100 - (100 / (1 + rs))
-            return rsi.iloc[-1] if not pd.isna(rsi.iloc[-1]) else 50.0
-        except:
-            return 50.0
-    
+        """Wilder RSI — shared implementation (utils.indicators)."""
+        from utils.indicators import rsi
+        v = rsi(prices, window)
+        return v if v is not None else float('nan')
+
     def _calculate_macd_signal(self, prices):
-        """Calculate MACD signal"""
-        try:
-            ema_12 = prices.ewm(span=12).mean()
-            ema_26 = prices.ewm(span=26).mean()
-            macd = ema_12 - ema_26
-            signal = macd.ewm(span=9).mean()
-            
-            if macd.iloc[-1] > signal.iloc[-1] and macd.iloc[-2] <= signal.iloc[-2]:
-                return "Bullish Crossover"
-            elif macd.iloc[-1] < signal.iloc[-1] and macd.iloc[-2] >= signal.iloc[-2]:
-                return "Bearish Crossover"
-            elif macd.iloc[-1] > signal.iloc[-1]:
-                return "Bullish"
-            else:
-                return "Bearish"
-        except:
-            return "Neutral"
-    
+        """MACD state from the shared implementation (utils.indicators)."""
+        from utils.indicators import macd
+        m = macd(prices)
+        if m is None:
+            return "n/a"
+        line, sig = m["line_series"], m["signal_series"]
+        if line.iloc[-1] > sig.iloc[-1] and line.iloc[-2] <= sig.iloc[-2]:
+            return "Bullish Crossover"
+        if line.iloc[-1] < sig.iloc[-1] and line.iloc[-2] >= sig.iloc[-2]:
+            return "Bearish Crossover"
+        return "Bullish" if line.iloc[-1] > sig.iloc[-1] else "Bearish"
+
     def _calculate_bollinger_signal(self, prices, window=20):
         """Calculate Bollinger Bands signal"""
         try:
@@ -1026,11 +1022,13 @@ class AdvancedTADashboard:
     def _create_macd_chart(self, symbol, hist):
         """Create MACD chart"""
         try:
-            ema_12 = hist['Close'].ewm(span=12).mean()
-            ema_26 = hist['Close'].ewm(span=26).mean()
-            macd = ema_12 - ema_26
-            signal = macd.ewm(span=9).mean()
-            histogram = macd - signal
+            from utils.indicators import macd as _macd
+            from utils.signal_hub import get_ohlcv
+            full = get_ohlcv(symbol)
+            m = _macd(full['Close'] if not full.empty else hist['Close'])
+            macd = m["line_series"].reindex(hist.index)
+            signal = m["signal_series"].reindex(hist.index)
+            histogram = m["hist_series"].reindex(hist.index)
             
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
                               vertical_spacing=0.02,
@@ -1058,11 +1056,10 @@ class AdvancedTADashboard:
         """Create RSI and Stochastic chart"""
         try:
             # Calculate RSI
-            delta = hist['Close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss
-            rsi = 100 - (100 / (1 + rs))
+            from utils.indicators import rsi_series
+            from utils.signal_hub import get_ohlcv
+            full = get_ohlcv(symbol)
+            rsi = rsi_series(full['Close'] if not full.empty else hist['Close']).reindex(hist.index)
             
             # Calculate Stochastic
             low_min = hist['Low'].rolling(window=14).min()

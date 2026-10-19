@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 from utils.unified_data_fetcher import DataFetcher
 from utils.advanced_ta import AdvancedTA
 from utils.options_analytics import OptionsAnalytics as OptionsAnalyzer
-from utils.sentiment_analyzer import SentimentAnalyzer
 from utils.tickers import WATCHLIST
 
 
@@ -21,7 +20,6 @@ class NextMoverEngine:
         self.data_fetcher = DataFetcher()
         self.advanced_ta = AdvancedTA()
         self.options_analyzer = OptionsAnalyzer()
-        self.sentiment_analyzer = SentimentAnalyzer()
         self._ohlcv_cache = {}
         
         # All 9 mining stocks in user's portfolio
@@ -29,30 +27,10 @@ class NextMoverEngine:
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
-    def _get_ohlcv(self, symbol: str, period: str = '3mo') -> 'pd.DataFrame':
-        """Return daily OHLCV DataFrame for symbol (cached per session)."""
-        cache_key = f"{symbol}_{period}"
-        if cache_key in self._ohlcv_cache:
-            return self._ohlcv_cache[cache_key]
-        try:
-            hist = yf.Ticker(symbol).history(period=period, interval='1d')
-            self._ohlcv_cache[cache_key] = hist
-            return hist
-        except Exception:
-            return pd.DataFrame()
-
-    def _get_sentiment_score(self, symbol: str) -> float:
-        """Return normalised sentiment score in [-1, +1]. 0.0 on error."""
-        try:
-            raw = self.sentiment_analyzer.get_news_sentiment([symbol], limit=20)
-            if 'error' in raw:
-                return 0.0
-            df = self.sentiment_analyzer.parse_sentiment_data(raw, ticker=symbol)
-            agg = self.sentiment_analyzer.get_aggregate_sentiment(df, ticker=symbol)
-            score = agg.get('avg_sentiment', 0.0)
-            return float(np.clip(score, -1.0, 1.0))
-        except Exception:
-            return 0.0
+    def _get_ohlcv(self, symbol: str, period: str = None) -> 'pd.DataFrame':
+        """Daily OHLCV from the shared signal hub (same data every tab uses)."""
+        from utils.signal_hub import get_ohlcv
+        return get_ohlcv(symbol)
 
     def get_comparative_performance(self, period='3M'):
         """
@@ -139,13 +117,11 @@ class NextMoverEngine:
                 close  = hist['Close']
                 volume = hist['Volume'] if 'Volume' in hist.columns else None
 
-                # ── RSI (14) ────────────────────────────────────────────────
-                delta = close.diff()
-                gain  = delta.where(delta > 0, 0).rolling(14).mean()
-                loss  = (-delta.where(delta < 0, 0)).rolling(14).mean()
-                rs    = gain / loss.replace(0, np.nan)
-                rsi   = (100 - 100 / (1 + rs)).fillna(50)
-                current_rsi = float(rsi.iloc[-1])
+                # ── RSI (14, Wilder — shared formula, same value as Trade Signals / My Plan) ──
+                from utils.indicators import rsi as _rsi, macd as _macd
+                current_rsi = _rsi(close)
+                if current_rsi is None:
+                    continue
 
                 # Continuous RSI score (favours stocks with room to move up)
                 if current_rsi < 30:
@@ -164,14 +140,10 @@ class NextMoverEngine:
                     rsi_pts = -28; rsi_label = f"RSI Extremely OB ({current_rsi:.0f})"
 
                 # ── MACD ────────────────────────────────────────────────────
-                ema12 = close.ewm(span=12).mean()
-                ema26 = close.ewm(span=26).mean()
-                macd_line   = ema12 - ema26
-                signal_line = macd_line.ewm(span=9).mean()
-                hist_vals   = macd_line - signal_line
-                cur_h  = float(hist_vals.iloc[-1]) if len(hist_vals) > 0 else 0
-                prev_h = float(hist_vals.iloc[-2]) if len(hist_vals) > 1 else 0
-                prev2_h= float(hist_vals.iloc[-3]) if len(hist_vals) > 2 else 0
+                m = _macd(close)
+                if m is None:
+                    continue
+                cur_h, prev_h, prev2_h = m["hist"], m["hist_prev"], m["hist_prev2"]
 
                 if cur_h > 0 and prev_h <= 0:
                     macd_pts   = 22; macd_label = "MACD Bullish Crossover 🚀"
@@ -244,7 +216,7 @@ class NextMoverEngine:
                 }
 
             except Exception:
-                scores[symbol] = {'score': 50, 'signals': ['Data unavailable'], 'rsi': 50}
+                continue   # no fake 50 — missing factor is re-weighted in the composite
 
         return scores
     
@@ -308,63 +280,18 @@ class NextMoverEngine:
         return scores
     
     def analyze_sentiment_scores(self):
-        """
-        Fetch sentiment scores for all mining stocks — ONE batched Alpha Vantage call
-        for all 9 tickers instead of 9 separate calls (stays under free-tier limit).
-        Returns dict {symbol: {'score': 0-100, 'raw': float, 'label': str, 'live': bool}}
-        """
+        """News tone per stock from the shared news module (same numbers as the
+        📰 Sentiment & News tab).  {symbol: {'score': 0-100, 'raw', 'label', 'live'}};
+        live=False means unavailable and the factor is left out of the composite."""
+        from utils.news_sentiment import news_sentiment
         scores = {}
-        neutral = {'score': 50, 'raw': 0.0, 'label': 'Neutral', 'live': False}
-
-        try:
-            # Single batch call for all stocks
-            raw_data = self.sentiment_analyzer.get_news_sentiment(
-                self.mining_stocks, limit=50
-            )
-
-            if 'error' in raw_data:
-                # Fall back: everyone gets neutral with live=False
-                for sym in self.mining_stocks:
-                    scores[sym] = dict(neutral)
-                return scores
-
-            feed = raw_data.get('feed', [])
-            if not feed:
-                for sym in self.mining_stocks:
-                    scores[sym] = dict(neutral)
-                return scores
-
-            # Accumulate per-ticker sentiment from the batch response
-            ticker_totals: dict = {s: [] for s in self.mining_stocks}
-            for article in feed:
-                for ts in article.get('ticker_sentiment', []):
-                    sym = ts.get('ticker', '')
-                    if sym in ticker_totals:
-                        try:
-                            ticker_totals[sym].append(
-                                float(ts.get('ticker_sentiment_score', 0))
-                            )
-                        except (ValueError, TypeError):
-                            pass
-
-            for sym in self.mining_stocks:
-                vals = ticker_totals.get(sym, [])
-                if vals:
-                    raw = float(np.mean(vals))
-                    raw = float(np.clip(raw, -1.0, 1.0))
-                    score_100 = (raw + 1) / 2 * 100
-                    label = ('Bullish' if raw >= 0.15
-                             else 'Bearish' if raw <= -0.15
-                             else 'Neutral')
-                    scores[sym] = {'score': score_100, 'raw': raw,
-                                   'label': label, 'live': True}
-                else:
-                    scores[sym] = dict(neutral)
-
-        except Exception:
-            for sym in self.mining_stocks:
-                scores[sym] = dict(neutral)
-
+        for sym in self.mining_stocks:
+            r = news_sentiment(sym)
+            if r.get("available"):
+                raw = float(np.clip(r["score"], -1.0, 1.0))
+                scores[sym] = {'score': (raw + 1) / 2 * 100, 'raw': raw, 'label': r['label'], 'live': True}
+            else:
+                scores[sym] = {'score': None, 'raw': None, 'label': 'n/a', 'live': False}
         return scores
 
     def calculate_composite_score(self):
@@ -382,30 +309,32 @@ class NextMoverEngine:
         # Combine scores
         composite_scores = []
 
+        weights = {'rs': 0.30, 'tech': 0.40, 'btc': 0.15, 'sent': 0.15}
         for symbol in self.mining_stocks:
-            # Extract scores (default to 50 if missing)
-            rs_score   = relative_strength.get(symbol, {}).get('score', 50)
-            tech_score = technical_setup.get(symbol, {}).get('score', 50)
-            btc_live   = symbol in btc_correlation
-            # Missing BTC factor: re-weight the other factors instead of inserting a fake 50
-            btc_score  = btc_correlation.get(symbol, {}).get('score', float('nan'))
-            sent_score = sentiment_scores.get(symbol, {}).get('score', 50)
-
-            # Updated weights: RS=30%, Technical=40%, BTC=15%, Sentiment=15%
-            if btc_live:
-                composite = (
-                    rs_score   * 0.30 +
-                    tech_score * 0.40 +
-                    btc_score  * 0.15 +
-                    sent_score * 0.15
-                )
-            else:
-                composite = (rs_score * 0.30 + tech_score * 0.40 + sent_score * 0.15) / 0.85
+            # Only factors that were actually measured count; missing ones are
+            # re-weighted away (never filled with a neutral 50).
+            parts = {
+                'rs':   relative_strength.get(symbol, {}).get('score'),
+                'tech': technical_setup.get(symbol, {}).get('score'),
+                'btc':  btc_correlation.get(symbol, {}).get('score'),
+                'sent': (sentiment_scores.get(symbol, {}).get('score')
+                         if sentiment_scores.get(symbol, {}).get('live') else None),
+            }
+            present = {k: v for k, v in parts.items() if v is not None}
+            if 'tech' not in present and 'rs' not in present:
+                continue   # no price-based factor at all -> no ranking for this stock
+            wsum = sum(weights[k] for k in present)
+            composite = sum(v * weights[k] for k, v in present.items()) / wsum
+            rs_score   = parts['rs'] if parts['rs'] is not None else float('nan')
+            tech_score = parts['tech'] if parts['tech'] is not None else float('nan')
+            btc_live   = parts['btc'] is not None
+            btc_score  = parts['btc'] if btc_live else float('nan')
+            sent_score = parts['sent'] if parts['sent'] is not None else float('nan')
 
             # Build reasoning
             reasons = []
 
-            if rs_score > 60:
+            if parts['rs'] is not None and rs_score > 60:
                 rs_signal = relative_strength.get(symbol, {}).get('signal', '')
                 if rs_signal:
                     reasons.append(f"🎯 {rs_signal}")
@@ -418,7 +347,7 @@ class NextMoverEngine:
             if btc_signal and btc_live and btc_score > 55:
                 reasons.append(f"₿ {btc_signal}")
 
-            sent_label = sentiment_scores.get(symbol, {}).get('label', 'Neutral')
+            sent_label = sentiment_scores.get(symbol, {}).get('label', 'n/a')
             if sent_label == 'Bullish':
                 reasons.append("📰 News Sentiment Bullish")
             elif sent_label == 'Bearish':
@@ -426,7 +355,7 @@ class NextMoverEngine:
 
             composite_scores.append({
                 'Symbol': symbol,
-                'Run Probability': f"{composite:.1f}%",
+                'Factors Used': ', '.join({'rs': 'RS', 'tech': 'Tech', 'btc': 'BTC', 'sent': 'News'}[k] for k in present),
                 'Score': composite,
                 'RS Score': rs_score,
                 'Tech Score': tech_score,
@@ -436,14 +365,16 @@ class NextMoverEngine:
                 'Sentiment Live': sentiment_scores.get(symbol, {}).get('live', False),
                 'Key Signals': ' | '.join(reasons) if reasons else 'Neutral Setup',
                 'Performance Gap': relative_strength.get(symbol, {}).get('gap_to_avg', 0),
-                'RSI': technical_setup.get(symbol, {}).get('rsi', 50),
+                'RSI': technical_setup.get(symbol, {}).get('rsi', float('nan')),
                 'Tech Signals': technical_setup.get(symbol, {}).get('signals', []),
                 'BTC Signal': btc_correlation.get(symbol, {}).get('signal', ''),
-                'Sent Label': sentiment_scores.get(symbol, {}).get('label', 'Neutral'),
+                'Sent Label': sentiment_scores.get(symbol, {}).get('label', 'n/a'),
             })
         
         # Convert to DataFrame and sort by score
         df = pd.DataFrame(composite_scores)
+        if df.empty:
+            return df
         df = df.sort_values('Score', ascending=False).reset_index(drop=True)
         
         # Add ranking
@@ -560,26 +491,22 @@ class NextMoverEngine:
 
         return results
 
-    def get_top_pick(self):
-        """Get the #1 predicted stock with detailed analysis"""
-        rankings = self.calculate_composite_score()
+    def get_top_pick(self, rankings=None):
+        """Get the #1 ranked stock (pass `rankings` to avoid recomputing everything)."""
+        if rankings is None:
+            rankings = self.calculate_composite_score()
         
         if rankings.empty:
             return None
         
         top_pick = rankings.iloc[0]
         
-        # Get current price
-        try:
-            price_data = self.data_fetcher.get_stock_data([top_pick['Symbol']], period='1D')
-            current_price = price_data[top_pick['Symbol']].iloc[-1] if not price_data.empty else None
-        except:
-            current_price = None
-        
+        from utils.signal_hub import snapshot
+        current_price = snapshot(top_pick['Symbol']).get('price')
+
         return {
             'symbol': top_pick['Symbol'],
             'rank': top_pick['Rank'],
-            'probability': top_pick['Run Probability'],
             'score': top_pick['Score'],
             'signals': top_pick['Key Signals'],
             'current_price': current_price,
