@@ -181,9 +181,10 @@ def scorecard(rep: dict) -> pd.DataFrame:
     rows.append(("1 · LPPLS bubble hazard", "Bubble reading → worse next 3 months", v(L.get("bt_ret")) if L.get("available") else es.INSUFFICIENT))
     rows.append(("2 · Fragility meter", "Top-20% fragility → deeper drop next 3 months", v(F.get("bt_dd")) if F.get("available") else es.INSUFFICIENT))
     rows.append(("3 · Trend memory (Hurst)", "Trend-following pays more when α ≥ 0.55", v(Hh.get("bt")) if Hh.get("available") else es.INSUFFICIENT))
-    rows.append(("4a · Crash odds (EVT)", "Fat-tail risk model calibrated where a bell curve is not", T.get("var_verdict", es.INSUFFICIENT)))
+    sym = rep.get("symbol") or "stock"
+    rows.append((f"4a · Crash odds (EVT) — {sym}", "Fat-tail risk model calibrated where a bell curve is not", T.get("var_verdict", es.INSUFFICIENT)))
     rows.append(("4a · Crash odds (EVT) — Bitcoin", "Same test on Bitcoin's own daily moves", T.get("var_verdict_btc", es.INSUFFICIENT)))
-    rows.append(("4b · Crash-together asymmetry", "RIOT↔BTC tails differ, stably", (T.get("tail") or {}).get("verdict", es.INSUFFICIENT)))
+    rows.append(("4b · Crash-together asymmetry", f"{sym}↔BTC tails differ, stably", (T.get("tail") or {}).get("verdict", es.INSUFFICIENT)))
     rows.append(("5 · Halving clock", "Earlier cycles at the same phase call the next 6 months", (Hv.get("bt") or {}).get("verdict", es.INSUFFICIENT)))
     rows.append(("6 · Tail-aware Kelly", "Walk-forward half-Kelly beats holding 80%", (K.get("verdict") or {}).get("verdict", es.INSUFFICIENT)))
     return pd.DataFrame(rows, columns=["Tool", "What was tested", "Backtest result"])

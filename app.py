@@ -309,6 +309,7 @@ Nothing here is financial advice.
         "⚠️ Risk Center",
         "🔄 Reflexivity",
         "🔬 Strategy Lab",
+        "🧪 Edge Lab",
         "🚦 Trade Signals",
         "🎯 Next-Mover Ranking",
         "⚡ Options Center",
@@ -325,7 +326,15 @@ Nothing here is financial advice.
 
     (tab_verdict, tab_plan, tab_portfolio, tab_corr, tab_market, tab_risk, tab_reflex, tab_lab,
      tab_signals, tab_ai, tab_options, tab_flow, tab_ta,
-     tab_sentiment, tab_poly, tab_research) = [view == name for name in SECTIONS]
+     tab_sentiment, tab_poly, tab_research) = [view == name for name in SECTIONS if name != "🧪 Edge Lab"]
+
+    # ── 🧪 Edge Lab: experimental research tools, each with its own honest backtest (not used by My Plan) ──
+    if view == "🧪 Edge Lab":
+        try:
+            from components.edge_lab import render as render_edge_lab
+            render_edge_lab()
+        except Exception as e:
+            _tab_error("Edge Lab", e)
 
     # ── Stock Verdict: one call per stock from every tab (= My Plan's call for holdings) ──
     if tab_verdict:

@@ -255,3 +255,14 @@ def test_build_report_short_history_is_na_not_fake():
     for k in ("lppls", "fragility", "hurst", "tails", "kelly", "halving"):
         assert rep[k]["available"] is False
     assert set(er.scorecard(rep)["Backtest result"]) == {es.INSUFFICIENT}
+
+
+def test_edge_lab_is_isolated_from_my_plan_and_verdict():
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[1]
+    for f in ("utils/verdict.py", "utils/holding_advisor.py", "components/holding_plan.py",
+              "components/stock_verdict.py", "utils/signal_hub.py"):
+        src = (root / f).read_text(encoding="utf-8")
+        assert "edge_lab" not in src and "edge_report" not in src, f
+    app = (root / "app.py").read_text(encoding="utf-8")
+    assert '"🧪 Edge Lab"' in app and "components.edge_lab" in app

@@ -366,3 +366,35 @@ did not beat holding, so the page leans on them for risk control, not prediction
 (documented and tested, not optimised). Bitcoin-to-2030 and sum-of-parts depend on assumptions (the build cost is undisclosed, so the parts are overstated).
 For non-miners the Bitcoin/peer checks are a rough fit. Confidence on this page can differ by one notch from My Plan's badge,
 and the page explains why.
+
+# 🧪 Edge Lab — experimental "obscure math" tools with honest backtests (branch global/edge-lab)
+
+**Request:** "Develop a new idea, tool, TA, analysis … something no one is using that will give me an edge … put it in its own page."
+New page `🧪 Edge Lab` (after 🔬 Strategy Lab). **Nothing on it feeds My Plan or the Stock Verdict** (enforced by a test).
+
+| # | Step | What |
+|---|---|---|
+| E1 | Engine + tools | `utils/edge_stats.py`: forward outcomes stamped at entry (use bars t+1…t+H only), weekly sampling, mean(ON)−mean(OFF), **circular-shift permutation** p-value (2,000 random baselines that keep the signal's on/off rhythm and the outcomes' autocorrelation), 60/40 in-sample / hold-out split, effective independent-episode counts, verdict = `edge found` (right direction in both halves, p<0.05 full, p<0.10 hold-out) / `no reliable edge` / `insufficient data` (<6 independent ON or OFF episodes, <3 in hold-out). `utils/edge_lab.py`: 6 tools (below). |
+| E2 | Speed + report | LPPLS fits use cached pseudo-inverses of the whole (tc, m, ω) grid per window length → ~20× faster with identical output (RIOT 0.6 s, BTC 1.1 s). `utils/edge_report.py` runs every tool with rules **fixed in advance** (never tuned), adds Bitcoin's VaR test and a peer robustness check (same rules on RIOT, MARA, CLSK, HUT). |
+| E3 | Page | `components/edge_lab.py`: stock pull-down (RIOT/MARA/CLSK/HUT; kept across section switches), scorecard, one tab per tool (plain-English "What is this?", today's reading with ⓘ tooltips, chart, backtest box with ON/OFF/buy-and-hold/p/hold-out/random-baseline band), Robustness tab (opt-in), method notes. Cached 6 h; download failure → error box, not cached, no fake values. `app.py`: one menu entry + 7-line render block. |
+
+**Tools:** (1) LPPLS bubble hazard (Sornette; 9 windows 60–440 bars, Filimonov–Sornette linearisation, standard filters: damping ≥0.8, ≥2.5 oscillations, 2<ω<15). (2) Fragility meter, an original blend of critical-slowing-down signals: Kendall-τ trends of 6-month variance, lag-1 autocorrelation and Bandt–Pompe permutation entropy, each ranked against its own past, then the blend ranked again. (3) Trend memory: rolling 252-day DFA Hurst α, tested on whether a 3-month-trend/1-month-hold bet pays more when α ≥ 0.55. (4) Crash odds: a POT-GPD 1-in-100-day loss tested walk-forward with Kupiec against a bell curve; GPD odds of a ≥30% monthly fall; rank-copula tail dependence λL vs λU vs BTC with a stationary-bootstrap CI and a half-vs-half stability check. (5) Halving clock: phase-folding by days since the halving, plus a leave-the-future-out sign test that needs at least 4 earlier cycles. (6) Tail-aware Kelly: empirical-distribution Kelly on monthly returns, walk-forward half-Kelly compared with fixed 80%, 40% and 100% weights, with a block bootstrap.
+
+**History used:** RIOT from 2017-10-04 (it was the biotech Bioptix before). MARA from Nov 2017 and CLSK from Dec 2020, when each began mining. Fragility rule note: the first draft compared the average of three ranks with 0.8, which almost never fired (about 1 episode). Before looking at outcomes, it was changed to rank the blend itself.
+
+**Results (2026-10-19, RIOT):** no tool showed a reliable buy/sell edge. LPPLS: insufficient data. Bubbles pointed the predicted way on all 4 miners but had only 0.5–1.8 independent episodes each. On BTC, bubble readings were followed by *higher* 3-month returns (+29% vs +11%, p 0.29), consistent with the literature that daily LPPLS fails on BTC. Fragility: insufficient data on RIOT, and no edge on BTC. Hurst: no edge (p 0.48; hold-out +1.0 pts, p 0.88). EVT: for **Bitcoin** the GPD is calibrated (35 breaches vs 37 expected) while the bell curve is not (68), so it is a better *risk* estimate but not a signal. For RIOT both are calibrated (11 vs 15). Tail asymmetry: full history shows no reliable asymmetry. The last 3 years show RIOT rallying with BTC more than it crashes with it (45% vs 32%, CI −22 to −1 pts). Halving clock: hit 77% vs 59% for "always up", but at most 3 earlier cycles, so insufficient data. Kelly: walk-forward half-Kelly cut the worst fall (−59% vs −84%) but cost 20 pts/yr of growth vs holding 80%, so no edge. A static 40% had a similar drawdown (−55%) with much more growth (30% vs 13% CAGR).
+
+**Tests:** `tests/test_edge_lab.py` (24) covers:
+- **Engine:** forward-outcome stamping, random signal → no edge, a planted future-peeking signal → edge, determinism, insufficient-data rule, point-in-time expanding rank.
+- **Tool math:** LPPLS finds a synthetic bubble but not noise; PE extremes and rolling = direct; Kendall trend; DFA white noise ≈ 0.5 and AR(1) > 0.6; GPD recovers ξ and VaR/tail-probability consistency; Kupiec; tail-dependence bounds and a planted crash-only link; VaR calibrated on t-noise; Kelly known answers (f* = p/a − q/b).
+- **No look-ahead:** truncation-invariance for LPPLS, fragility, DFA, the halving fold (future changed → fold unchanged) and walk-forward Kelly.
+- **Report and isolation:** report determinism and N/A on short history; isolation from My Plan, Verdict and signal_hub.
+
+Suite: 133 passed. AppTest: RIOT, MARA, CLSK and HUT each about 9 s cold with no exceptions or errors. The peer check works, the selection survives switching sections, and with prices down the page shows an error box. All-section smoke: error counts unchanged from baseline.
+
+**Risks:**
+- Small samples. Bubbles and crashes are rare, so most tests can only say "insufficient data".
+- The rules are judgement calls, fixed in advance. Other thresholds might look different, and we deliberately did not search them.
+- The GPD fit on overlapping 21-day windows is a rough base rate.
+- The Kelly results depend on the 2020–2026 path and a 3% cash assumption.
+- Yahoo is free and unauthenticated, so it may rate-limit; the page then shows an error.
