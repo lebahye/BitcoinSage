@@ -177,3 +177,16 @@ Note: the smoke "error boxes" count per section (Risk Center 6, Polymarket 18, �
   Headless ok; smoke 0 exceptions / 0 failure boxes (run with BITCOINSAGE_NO_NOTIFY=1). Manual AppTest: seeded an older
   HOLD call → banner showed "HOLD → TRIM, Concentration warn → bad"; "Got it" cleared it. No message was sent at any point
   (no secrets configured on the box, alerts disabled). Test state file removed afterwards.
+
+## V2 Step 3 — Event calendar
+- New `utils/event_calendar.py`: FOMC 2026–2027 (Fed schedule, decision day = 2nd day, SEP meetings marked) and CPI
+  release dates Nov 2026–Dec 2027 (BLS schedule), both hardcoded with source URLs and `SCHEDULES_LAST_VERIFIED = 2026-10-19`
+  (fetched and checked today). Earnings from Yahoo `Ticker.calendar` for the selected stock + RIOT, MARA, CLSK, HUT, KEEL,
+  CIFR, WULF, IREN, CORZ (marked "est."). Next halving from live block height (blockchain.info, mempool.space fallback):
+  block 1,050,000; date assumes 10-minute blocks.
+- My Plan: "⏰ Coming up in the next 14 days" line above the checks, plus a "📅 Event calendar" table (next 120 days +
+  halving) with sources and a plain-English glossary entry. Cached (earnings 6h, block height 30m); empty/failed fetches
+  are not cached and degrade to a note.
+- Live today: FOMC Oct 28 (9d), RIOT earnings Oct 29 (10d, est.), CIFR Nov 2 (14d) flagged; CPI Nov 10; halving est.
+  Apr 11 2028 (height 972,201, 77,799 blocks to go).
+- Tests: 29 pass (3 new: halving math, schedule sanity, 14-day flagging). Headless ok; smoke 0 exceptions / 0 failure boxes.

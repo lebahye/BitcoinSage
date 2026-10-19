@@ -35,6 +35,47 @@ def _analyst_targets_cached(symbol: str) -> dict:
     return out if out["mean"] else {}
 
 
+_EVENT_PEERS = ("RIOT", "MARA", "CLSK", "HUT", "KEEL", "CIFR", "WULF", "IREN", "CORZ")
+
+
+class _NoData(Exception):
+    pass
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def _earnings_cached(symbols: tuple) -> dict:
+    from utils.event_calendar import fetch_earnings
+    out = fetch_earnings(symbols)
+    if not any(out.values()):
+        raise _NoData()          # don't cache an all-empty (likely rate-limited) result
+    return out
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def _block_height_cached() -> int:
+    from utils.event_calendar import fetch_block_height
+    h = fetch_block_height()
+    if not h:
+        raise _NoData()
+    return h
+
+
+def load_events(symbol: str):
+    from datetime import date as _date
+    from utils.event_calendar import build_calendar
+    syms = tuple(dict.fromkeys((symbol,) + _EVENT_PEERS))
+    try:
+        earn = _earnings_cached(syms)
+    except Exception:
+        earn = {}
+    try:
+        height = _block_height_cached()
+    except Exception:
+        height = None
+    today = _date.today()
+    return today, build_calendar(today, earn, height), bool(earn), height
+
+
 def _analyst_targets(symbol: str) -> dict:
     try:
         return _analyst_targets_cached(symbol)
@@ -149,6 +190,14 @@ class HoldingPlan:
         c4.metric("Share of your portfolio", "n/a" if np.isnan(f["weight"]) else f"{f['weight']:.0%}",
                   help="This position's value ÷ the value of all positions saved in the Portfolio tab.")
 
+        today, events, have_earn, height = load_events(symbol)
+        from utils.event_calendar import flagged
+        soon = flagged(events, today)
+        if soon:
+            st.markdown("⏰ **Coming up in the next 14 days:** " + " · ".join(
+                f"**{e.title}** {e.when:%a %b %d} ({e.days_away(today)}d)" for e in soon)
+                + " — expect bigger price swings around these. See 📅 Event calendar below.")
+
         # ── The checks ───────────────────────────────────────────────────
         st.subheader("Why — the checks behind the call")
         for chk in adv.checks:
@@ -162,6 +211,8 @@ class HoldingPlan:
                 st.markdown("---")
 
         self._render_add(add)
+
+        self._render_events(symbol, today, events, have_earn, height)
 
         st.subheader("🔁 What would change my mind")
         for line in adv.change_my_mind:
@@ -315,6 +366,28 @@ class HoldingPlan:
                                             "Call": f'{h["old"]["action"]} → {h["new"]["action"]}',
                                             "Add?": f'{h["old"].get("add_action")} → {h["new"].get("add_action")}'}
                                            for h in reversed(hist)]), hide_index=True, use_container_width=True)
+
+    # ------------------------------------------------------------------
+    def _render_events(self, symbol, today, events, have_earn, height):
+        from utils.event_calendar import FLAG_DAYS, FOMC_SOURCE, CPI_SOURCE, SCHEDULES_LAST_VERIFIED
+        st.subheader("📅 Event calendar")
+        if not events:
+            st.caption("No upcoming events available right now.")
+            return
+        rows = [{"": "⏰" if 0 <= e.days_away(today) <= FLAG_DAYS else "",
+                 "Date": e.when.strftime("%a %b %d, %Y") + (" (est.)" if e.estimated else ""),
+                 "In": f"{e.days_away(today)} days", "Event": e.title, "Details": e.detail} for e in events]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        notes = []
+        if not have_earn:
+            notes.append("earnings dates unavailable from Yahoo right now (try Refresh later)")
+        if not height:
+            notes.append("live block height unavailable, so no halving estimate")
+        st.caption(f"⏰ = within {FLAG_DAYS} days. Earnings: Yahoo Finance (often estimated until the company confirms). "
+                   f"FOMC: [Federal Reserve]({FOMC_SOURCE}); CPI: [BLS]({CPI_SOURCE}) — schedules last verified "
+                   f"{SCHEDULES_LAST_VERIFIED:%b %d, %Y}. Showing the next 120 days plus the halving."
+                   + (" Note: " + "; ".join(notes) + "." if notes else ""))
+        explain("event_calendar")
 
     # ------------------------------------------------------------------
     def _render_add(self, a):

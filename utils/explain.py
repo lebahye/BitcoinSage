@@ -89,6 +89,19 @@ GLOSSARY = {
         "Then tick *Send me an alert when a call changes* below. An alert is only sent when a change is detected "
         "while the dashboard is open — it doesn't run in the background."
     ),
+    "event_calendar": (
+        "Why these events matter",
+        "**Earnings:** each quarter the company reports results; miners often move 10–20% in a day. Re-check My Plan after.\n\n"
+        "**FOMC (Fed rate decision):** the Federal Reserve sets US interest rates 8 times a year. Lower or falling rates "
+        "tend to help risky assets like bitcoin and miners; surprises in either direction can move them sharply.\n\n"
+        "**CPI (inflation report):** monthly inflation numbers. Hotter-than-expected inflation can mean higher rates for "
+        "longer, which usually hurts speculative stocks.\n\n"
+        "**Bitcoin halving:** about every 4 years (every 210,000 blocks) the bitcoin miners earn per block is cut in half. "
+        "It's the single biggest scheduled hit to miner revenue — unless the bitcoin price rises to make up for it. "
+        "Miners that are efficient and have AI/data-center income are better placed to survive it.\n\n"
+        "**Tip for a long-term holder:** avoid making big buy/sell decisions on the day before these events; let the "
+        "news land, then re-check."
+    ),
     "sma200": (
         "200-day moving average",
         "**What it is:** the average closing price over the last 200 trading days (~10 months). "
