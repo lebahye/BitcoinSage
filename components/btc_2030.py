@@ -134,8 +134,17 @@ def render(symbol: str, closes: pd.DataFrame, targets: dict, plan_year: int, yea
         for col, (k, lab, hlp, _) in zip(fc, link.FACTORS):
             dv = round(d1, 1) if (k == "dilution" and d1 is not None) else 0.0
             vals[k] = col.number_input(lab, -50.0, 100.0, float(dv), 1.0, key=f"btc_f_{k}_{symbol}", help=hlp)
-        st.markdown("AI/data-centre facts: " + " · ".join(
-            f"[{v['label']}]({v['url']}) ({v['date']})" for v in link.AI_SOURCES.values()))
+        from utils import company_facts as cf
+        mw, cv = cf.get(symbol, "ai_contracted_mw"), cf.get(symbol, "ai_contract_value_usd")
+        if cf.alias(symbol) == "RIOT":
+            st.markdown("AI/data-centre facts: " + " · ".join(
+                f"[{v['label']}]({v['url']}) ({v['date']})" for v in link.AI_SOURCES.values()))
+        elif mw:
+            st.markdown(f"AI/data-centre facts for {symbol}: **{mw['value']:,} MW** contracted"
+                        + (f", ≈${cv['value']/1e9:,.1f}B contract value" if cv else "")
+                        + f" ([source]({mw['url']}), as of {mw['as_of']:%b %d %Y}).")
+        else:
+            st.caption(f"AI/data-centre contracts for {symbol}: N/A (none on file).")
     drift = link.drift_from_factors(vals)
     sig = link.horizon_sigma(fit, years)
     imp = {s: link.project_stock(s0, b0, v["price"], years, beta, drift, sig) for s, v in sc.items()}
@@ -237,7 +246,8 @@ def render(symbol: str, closes: pd.DataFrame, targets: dict, plan_year: int, yea
                    f"Full-history beta {fit['beta']:.2f} ± {fit['beta_se']:.2f}, R² {fit['r2']:.2f}; rolling 3-yr beta ranged "
                    f"{fit['beta_min']:.2f}–{fit['beta_max']:.2f}. Level fit R² {fit['level_r2']:.2f}; typical stray "
                    f"±{fit['level_sd']:.2f} (log), quarter-to-quarter persistence {fit['rho_q']:.2f}. "
-                   "The big drop in the last 3 years coincides with Riot's AI/data-centre pivot and slower dilution.")
+                   + ("The big drop in the last 3 years coincides with Riot's AI/data-centre pivot and slower dilution."
+                      if symbol == "RIOT" else ""))
 
     _render_cycle(b_ser if btc_hist is None else btc_hist, block_height, plan_year)
     _render_watchlist(block_height)

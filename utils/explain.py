@@ -28,8 +28,9 @@ GLOSSARY = {
         "negative correlation (like the VIX) can act as a hedge."
     ),
     "riot_corr_map": (
-        "RIOT Correlation Map",
-        "**What it is:** a ranking of which stocks and markets move most like RIOT, measured over the last "
+        "Correlation Map",
+        "**What it is:** a ranking of which stocks and markets move most like the anchor stock (RIOT by default; "
+        "pick any miner or holding), measured over the last "
         "year and the last 3 months of daily prices.\n\n"
         "**How to read it:** if RIOT's link to other miners and AI data-center stocks is stronger than its "
         "link to Bitcoin, RIOT is trading as an 'AI infrastructure' story as much as a Bitcoin story. "

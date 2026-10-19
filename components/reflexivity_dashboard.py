@@ -7,7 +7,8 @@ components/reflexivity_dashboard.py  (v3)
     🧭 My Plan stays the final word.
   * Two loops explained: the stabilising network (difficulty) loop vs the reflexive capital-markets loop.
   * Mining economics from live block height, difficulty and fees, with your machine/power assumptions and
-    Riot's reported cost to mine; Riot sum-of-parts value check; dilution tracker; loop strength over time.
+    the focus company's reported cost to mine and sum-of-parts value check (utils/company_facts.py; N/A where not
+    disclosed); dilution tracker; loop strength over time.
 Maths: utils/reflexivity.py · network data: utils/network_data.py · filing facts: utils/riot_facts.py.
 """
 from __future__ import annotations
@@ -26,7 +27,7 @@ from utils import reflexivity as rx
 from utils import signal_hub
 from utils.explain import HELP, explain
 from utils.market_data import to_stock_calendar
-from utils.riot_facts import FACT_SOURCES, Q2_2026, RIOT_CIK
+from utils.riot_facts import FACT_SOURCES, Q2_2026
 from utils.styles import data_lineage_panel
 
 HORIZONS = {63: "next ~3 months", 126: "next ~6 months"}
@@ -99,7 +100,7 @@ class ReflexivityDashboard:
     def render(self, selected_stocks: list, stock_names: dict):
         st.header("🔄 Reflexivity — are miners in a boom or bust loop?")
         st.caption("Describes which feedback loop looks active for bitcoin miners today, what it has meant historically, "
-                   "and what Riot's parts are worth. Educational — **not financial advice**; 🧭 My Plan is the final word.")
+                   "and what the focus company's parts are worth. Educational — **not financial advice**; 🧭 My Plan is the final word.")
         explain("reflexivity")
 
         try:
@@ -112,8 +113,10 @@ class ReflexivityDashboard:
         c1, c2 = st.columns([1, 2])
         opts = list(stock_names.keys())
         focus_default = held[0] if held else ("RIOT" if "RIOT" in opts else opts[0])
-        focus = c1.selectbox("Focus stock", opts, index=opts.index(focus_default), key="rfx_focus",
-                             help="Defaults to your largest miner holding (from the 🏆 Portfolio tab).")
+        from components.stock_verdict import pick_following_verdict
+        focus = pick_following_verdict(c1, "Focus stock", opts, "rfx_focus", focus_default,
+                                       help="Follows the stock picked on ⚖️ Stock Verdict (when it's a miner in this "
+                                            "list); otherwise your largest miner holding. Every tab below uses it.")
         basket_default = held or [s for s in selected_stocks if s in stock_names] or ["MARA", "RIOT", "CLSK"]
         basket = c2.multiselect("Miner basket (equal-weight)", opts, default=basket_default, key="rfx_basket",
                                 help="Defaults to the miners you hold. Each stock counts equally (daily returns "
@@ -135,7 +138,7 @@ class ReflexivityDashboard:
             f"<strong>Network:</strong> {net.get('source', 'unavailable')} hashrate/difficulty, data as of "
             f"<b>{net.get('as_of', 'N/A')}</b>; fees: blockchain.info to "
             f"<b>{fees.index[-1].date() if len(fees) else 'N/A'}</b> + mempool.space last ~1,008 blocks (cached 1 h)",
-            "<strong>Company facts:</strong> Riot filings (dated, cited) · <strong>Estimates:</strong> power breakeven, "
+            "<strong>Company facts:</strong> company filings per ticker (dated, cited; N/A where not disclosed) · <strong>Estimates:</strong> power breakeven, "
             "sum-of-parts — from inputs you can edit"], title="Reflexivity data")
 
         f_px = closes[focus].dropna()
@@ -158,7 +161,7 @@ class ReflexivityDashboard:
         from components.signal_reconcile import render_reflexivity_banner
         render_reflexivity_banner(focus, rx.PHASES[ph_now][0] if ph_now else None, edge)
 
-        tabs = st.tabs(["🎯 Now", "🔁 How the loops work", "📡 Coupling", "🧪 Track record", "💰 Riot value check",
+        tabs = st.tabs(["🎯 Now", "🔁 How the loops work", "📡 Coupling", "🧪 Track record", "💰 Value check",
                         "🧾 Dilution", "⛏️ Hashprice & miner stress", "📈 Loop strength", "🗺️ Phase map"])
         sections = [
             lambda: self._tab_now(focus, basket, pf_f, pf_b, tr_f, tr_b, btc),
@@ -167,7 +170,7 @@ class ReflexivityDashboard:
             lambda: self._tab_track(focus, basket, tr_f, tr_b, btc, net, fees),
             lambda: self._tab_value(focus, f_px, btc),
             lambda: self._tab_dilution(focus),
-            lambda: self._tab_hashprice(btc, net, rewards, fees),
+            lambda: self._tab_hashprice(focus, btc, net, rewards, fees),
             lambda: self._tab_loop_strength(focus, f_px, btc, net),
             lambda: self._tab_phase_map(focus, pf_f, pf_b),
         ]
@@ -378,52 +381,79 @@ class ReflexivityDashboard:
                                        "Up how often": [f"{v:.0%}" for v in t.hit_rate], "Verdict": t.verdict}),
                          hide_index=True, use_container_width=True)
 
-    # ── 💰 Riot value check ─────────────────────────────────────────────
+    # ── 💰 Value check (sum of the parts) — any company with cited facts ──
     def _tab_value(self, focus, f_px, btc):
+        from utils import company_facts as cf
         explain("sum_of_parts")
-        if focus != "RIOT":
-            st.info(f"Filing facts are on file for RIOT only — set the focus stock to RIOT. ({focus}: N/A)")
-            return
+        is_riot = cf.alias(focus) == "RIOT"
         F = Q2_2026
-        bal = signal_hub.get_balance("RIOT")
-        shares_s = signal_hub.get_shares("RIOT")
+        bal = signal_hub.get_balance(focus)
+        shares_s = signal_hub.get_shares(focus)
         shares = float(shares_s.iloc[-1]) if len(shares_s) else bal.get("shares")
         price, b0 = float(f_px.iloc[-1]), float(btc.iloc[-1])
-        st.caption(f"Facts from [{F['label']}]({F['url']}) (quarter ended {F['period_end']:%b %d %Y}, published "
-                   f"{F['published']:%b %d %Y}). Debt from Yahoo's balance sheet ({bal.get('date', 'N/A')}). "
-                   "Undisclosed items are inputs — defaults are 0 so nothing is invented.")
+        d = cf.sop_inputs(focus, bal)
+        with st.expander(f"📑 {focus} facts on file (cited, dated — N/A where not disclosed)", expanded=False):
+            st.dataframe(pd.DataFrame(cf.facts_table(focus)), hide_index=True, use_container_width=True,
+                         column_config={"Source": st.column_config.LinkColumn("Source")})
+            note = cf.COMPANIES.get(cf.alias(focus), {}).get("notes")
+            if note:
+                st.caption(note)
+        if cf.coverage(focus) == "none" and not bal:
+            st.info(f"N/A — no cited filing facts on file for {focus} and Yahoo's balance sheet is unavailable.")
+            return
+        st.caption(f"Bitcoin held from the facts file; cash: {d['cash_src']}; debt: {d['debt_src']}. "
+                   + (f"Lease facts from [{F['label']}]({F['url']}) (published {F['published']:%b %d %Y}). " if is_riot else "")
+                   + "Undisclosed items are inputs — defaults are 0 so nothing is invented"
+                   + (f" (not on file: {', '.join(d['missing'])})." if d["missing"] else "."))
+        k_ = f"_{focus}"
         with st.expander("⚙️ Inputs (edit to your own view)", expanded=False):
             a = st.columns(3)
-            btc_held = a[0].number_input("Bitcoin held", 0, 100_000, int(F["btc_held"]), 100, key="sop_btc",
-                                         help=f"{F['btc_held']:,} at {F['period_end']:%b %d %Y}, of which {F['btc_pledged']:,} "
-                                              "pledged as loan collateral (still Riot's, but tied to a loan).")
-            cash = a[1].number_input("Cash ($M)", 0.0, 10_000.0, F["cash_usd"] / 1e6, 10.0, key="sop_cash",
-                                     help=f"Incl. ${F['cash_restricted_usd']/1e6:.1f}M restricted.") * 1e6
-            dflt_debt = (bal.get("total_debt") or 0) / 1e6
-            debt = a[2].number_input("Debt ($M)", 0.0, 20_000.0, float(round(dflt_debt, 1)), 10.0, key="sop_debt",
-                                     help=f"Yahoo total debt at {bal.get('date', 'N/A')}. 0 if unavailable — check the 10-Q.") * 1e6
+            bh = d["btc_held"]
+            btc_held = a[0].number_input("Bitcoin held", 0, 2_000_000, int(bh or 0), 100, key="sop_btc" + k_,
+                                         help=("N/A in the facts file — enter your own figure." if bh is None else
+                                               f"{bh:,} per {cf.get(focus, 'btc_held')['source']}"
+                                               + (f", of which {d['btc_pledged']:,} pledged/loaned (still the company's, "
+                                                  "but tied to a loan)." if d["btc_pledged"] else ".")))
+            cash = a[1].number_input("Cash ($M)", 0.0, 50_000.0, float(round((d["cash"] or 0) / 1e6, 1)), 10.0,
+                                     key="sop_cash" + k_, help=f"Source: {d['cash_src']}.") * 1e6
+            debt = a[2].number_input("Debt ($M)", 0.0, 50_000.0, float(round((d["debt"] or 0) / 1e6, 1)), 10.0,
+                                     key="sop_debt" + k_, help=f"Source: {d['debt_src']}. 0 if unavailable — check the 10-Q.") * 1e6
             b = st.columns(4)
-            noi = b[0].slider("AI lease operating income ($M/yr)", F["lease_191mw_noi_low"] / 1e6,
-                              F["lease_191mw_noi_high"] / 1e6, (F["lease_191mw_noi_low"] + F["lease_191mw_noi_high"]) / 2e6,
-                              1.0, key="sop_noi", help="Riot's own estimate: $365–411M average per year, 191 MW AI-lab lease.") * 1e6
-            yrs_to_full = max(0.0, (F["lease_191mw_full"] - date.today()).days / 365.25)
-            start = b[1].number_input("Income starts in (years)", 0.0, 10.0, round(yrs_to_full, 1), 0.1, key="sop_start",
-                                      help=f"{F['lease_191mw_first_mw']}; full 191 MW by {F['lease_191mw_full']:%b %Y}.")
-            term = b[2].number_input("Lease years", 1, 40, int(F["lease_191mw_term_years"]), 1, key="sop_term",
-                                     help="Initial term through June 2048 (two optional 5-year extensions not counted).")
-            rate = b[3].number_input("Discount rate %/yr", 0.0, 30.0, 9.0, 0.5, key="sop_rate",
+            if is_riot:
+                noi = b[0].slider("AI lease operating income ($M/yr)", F["lease_191mw_noi_low"] / 1e6,
+                                  F["lease_191mw_noi_high"] / 1e6, d["lease_noi"] / 1e6, 1.0, key="sop_noi" + k_,
+                                  help="Riot's own estimate: $365–411M average per year, 191 MW AI-lab lease.") * 1e6
+            else:
+                mw = cf.get(focus, "ai_contracted_mw")
+                noi = b[0].number_input("AI lease operating income ($M/yr) — NOT disclosed", 0.0, 10_000.0, 0.0, 10.0,
+                                        key="sop_noi" + k_,
+                                        help=("No cited operating-income figure on file. " + (
+                                            f"{focus} has {mw['value']:,} MW contracted ({mw['source']}, "
+                                            f"{mw['as_of']:%b %Y}) — enter your own NOI estimate." if mw else
+                                            "No AI/HPC contracts on file."))) * 1e6
+            start = b[1].number_input("Income starts in (years)", 0.0, 10.0, float(d["lease_start"]), 0.1, key="sop_start" + k_,
+                                      help=(f"{F['lease_191mw_first_mw']}; full 191 MW by {F['lease_191mw_full']:%b %Y}."
+                                            if is_riot else "Your assumption."))
+            term = b[2].number_input("Lease years", 1, 40, int(d["lease_years"]), 1, key="sop_term" + k_,
+                                     help=("Initial term through June 2048 (two optional 5-year extensions not counted)."
+                                           if is_riot else "Your assumption (typical AI leases run 10–20 years)."))
+            rate = b[3].number_input("Discount rate %/yr", 0.0, 30.0, 9.0, 0.5, key="sop_rate" + k_,
                                      help="Your required return. Assumption — higher = more cautious.") / 100
             c = st.columns(3)
-            build = c[0].number_input("Remaining build cost ($M) — NOT disclosed", 0.0, 50_000.0, 0.0, 100.0, key="sop_build",
-                                      help=f"Riot hasn't published it. A ${F['interim_facility_usd']/1e6:.0f}M Morgan Stanley "
-                                           "interim facility funds the start. Enter your estimate.") * 1e6
-            mining = c[1].number_input("Mining business value ($M)", 0.0, 50_000.0, 0.0, 100.0, key="sop_mining",
-                                       help="Your estimate. Riot's all-in cost to mine (incl. depreciation) was above the "
-                                            "BTC price in Q2 2026.") * 1e6
-            other = c[2].number_input("Other: land/power, other leases ($M)", 0.0, 50_000.0, 0.0, 100.0, key="sop_other",
-                                      help="e.g. AMD lease (NOI not disclosed) or the Corsicana site (non-binding LOI only).") * 1e6
+            build = c[0].number_input("Remaining build cost ($M) — NOT disclosed", 0.0, 50_000.0, 0.0, 100.0, key="sop_build" + k_,
+                                      help=(f"Riot hasn't published it. A ${F['interim_facility_usd']/1e6:.0f}M Morgan Stanley "
+                                            "interim facility funds the start. Enter your estimate." if is_riot else
+                                            "Enter your estimate (0 = ignored, which overstates the parts).")) * 1e6
+            mc = cf.miner_cost(focus)
+            mining = c[1].number_input("Mining business value ($M)", 0.0, 50_000.0, 0.0, 100.0, key="sop_mining" + k_,
+                                       help="Your estimate." + (
+                                           f" All-in cost to mine (incl. depreciation) was ${mc['incl_da']:,}/BTC "
+                                           f"({mc['as_of']:%b %Y})." if mc else "")) * 1e6
+            other = c[2].number_input("Other: land/power, other leases ($M)", 0.0, 50_000.0, 0.0, 100.0, key="sop_other" + k_,
+                                      help=("e.g. AMD lease (NOI not disclosed) or the Corsicana site (non-binding LOI only)."
+                                            if is_riot else "e.g. land, power contracts, other businesses.")) * 1e6
         r = rx.sum_of_parts(price, shares, b0, btc_held, cash, debt, noi, term, start, rate, build, mining, other,
-                            F["btc_pledged"])
+                            d["btc_pledged"])
         if r is None:
             st.warning("N/A — share count or price unavailable.")
             return
@@ -435,16 +465,20 @@ class ReflexivityDashboard:
         k = st.columns(3)
         k[0].metric("Market cap ÷ sum of parts", "N/A" if r["ratio"] is None else f"{r['ratio']:.2f}×",
                     help="Above 1 = the market pays more than these parts add up to (e.g. for future growth or parts you "
-                         "left at 0); below 1 = less.")
-        k[1].metric("Market cap ÷ bitcoin held ('mNAV')", "N/A" if r["btc_only_mnav"] is None else f"{r['btc_only_mnav']:.1f}×",
-                    help="Common treasury-company yardstick. Less meaningful for Riot, which is mostly an operating business.")
+                         "left at 0); below 1 = less. N/A when the parts add up to zero or less (e.g. debt > assets entered).")
+        k[1].metric("Market cap ÷ bitcoin held ('mNAV')",
+                    "N/A" if r["btc_only_mnav"] is None else "N/A (holds little BTC)" if r["btc_only_mnav"] > 100
+                    else f"{r['btc_only_mnav']:.1f}×",
+                    help="Common treasury-company yardstick. Less meaningful for operating businesses (miners, AI hosts).")
         rest = r["market_cap"] - (r["parts"]["Bitcoin held"] + r["parts"]["Cash"] + r["parts"]["Less: debt"])
         k[2].metric("Market's price for everything except BTC & net cash", _m(rest),
                     help="Market cap − (bitcoin + cash − debt). No assumptions: what investors pay for the mining "
                          "business, AI leases and land/power together.")
         st.caption(f"Bitcoin valued at today's {_usd(b0)} (of which {_m(r['pledged_value'])} is pledged collateral). "
-                   f"Shares: {shares/1e6:,.1f}M (Yahoo). The lease value is shown **before** the undisclosed build cost "
-                   "unless you enter one — that cost could be large.")
+                   f"Shares: {shares/1e6:,.1f}M (Yahoo). "
+                   + ("The lease value is shown **before** the undisclosed build cost unless you enter one — that cost "
+                      "could be large." if is_riot else
+                      "AI-lease value is 0 unless you enter it, so for AI hosts the parts are understated."))
 
     # ── 🧾 Dilution ──────────────────────────────────────────────────────
     def _tab_dilution(self, focus):
@@ -468,14 +502,15 @@ class ReflexivityDashboard:
                          hide_index=True, use_container_width=True)
         self._converts_map(focus, sh)
         st.markdown("**Recent SEC filings that can come with share sales**")
-        if focus != "RIOT":
-            st.caption("SEC check set up for RIOT only (N/A).")
+        from utils import company_facts as cf, edgar
+        cik = cf.cik(focus)
+        if not cik:
+            st.caption(f"No SEC CIK on file for {focus} (N/A — e.g. a foreign filer using 20-F/6-K).")
             return
-        from utils import edgar
-        r = edgar.offering_filings(RIOT_CIK)
-        browse = f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={RIOT_CIK}&type=424&owner=include&count=40"
+        r = edgar.offering_filings(cik)
+        browse = f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=424&owner=include&count=40"
         if not r["available"]:
-            st.caption(f"Couldn't check automatically — {r['reason']}. [Open Riot's filings on SEC EDGAR]({browse}).")
+            st.caption(f"Couldn't check automatically — {r['reason']}. [Open {focus}'s filings on SEC EDGAR]({browse}).")
             return
         if not r["filings"]:
             st.caption(f"No 424B/S-3/S-8 filings among the most recent filings. [EDGAR]({browse})")
@@ -516,7 +551,7 @@ class ReflexivityDashboard:
                    + " · ".join(f"[filing]({u})" for u in n.get("sources", [])))
 
     # ── ⛏️ Hashprice & miner stress ──────────────────────────────────────
-    def _tab_hashprice(self, btc, net, rewards, fees):
+    def _tab_hashprice(self, focus, btc, net, rewards, fees):
         explain("hashprice")
         if not net:
             st.warning("Network data unavailable (mempool.space and blockchain.info) — hashprice and breakeven N/A.")
@@ -548,25 +583,36 @@ class ReflexivityDashboard:
                     None if be is None else f"BTC is {b0/be:.2f}× this", delta_color="off",
                     help="Electricity cost to mine 1 BTC at today's difficulty with your inputs. Excludes staff, repairs, "
                          "depreciation and interest.")
+        from utils import company_facts as cf
         F = Q2_2026
-        try:
-            adj = net["adjustments"]
-            q = adj[(adj.date >= "2026-03-15") & (adj.date <= "2026-06-30")]
-            d_q2 = float(q.difficulty.mean()) if len(q) else None
-        except Exception:
-            d_q2 = None
-        adj_cost = rx.difficulty_adjusted_cost(F["cost_to_mine_ex_da"], d_q2, diff)
-        m[3].metric("Riot cost to mine (Q2 2026)", f"${F['cost_to_mine_ex_da']:,} / ${F['cost_to_mine_incl_da']:,}",
-                    "cash / incl. depreciation", delta_color="off",
-                    help="Riot's reported cost per BTC mined, Q2 2026 (excl. / incl. miner depreciation).")
-        stress = ("🔴 **below** Riot's all-in cost" if b0 < F["cost_to_mine_incl_da"] else "🟢 above Riot's all-in cost")
-        st.markdown(f"**Miner stress:** Bitcoin {_usd(b0)} is **{b0/F['cost_to_mine_ex_da']:.2f}×** Riot's Q2 cash cost and "
-                    f"**{b0/F['cost_to_mine_incl_da']:.2f}×** its all-in cost — {stress}. "
-                    + (f"Adjusted for the difficulty rise since Q2 (×{diff/d_q2:.2f}), the cash cost is roughly "
-                       f"**{_usd(adj_cost)}** today (estimate, same fleet & power price)." if adj_cost else ""))
-        st.caption(f"Riot's power cost alone (computed from its Q2 table): ${73.499e6/F['btc_mined_q']:,.0f}/BTC gross, "
-                   f"${(73.499e6-10.054e6)/F['btc_mined_q']:,.0f}/BTC after power-curtailment credits. "
-                   f"Source: [{F['label']}]({F['url']}) ({F['published']:%b %d %Y}).")
+        mc = cf.miner_cost(focus)
+        if mc is None:
+            m[3].metric(f"{focus} cost to mine", "N/A", "not disclosed / not on file", delta_color="off",
+                        help=f"No cited cost-to-mine figure for {focus} in the facts file. Companies report this "
+                             "differently (or not at all); nothing is estimated.")
+            st.markdown(f"**Miner stress for {focus}:** N/A — cost to mine not on file. The power-only breakeven above "
+                        "is a generic machine estimate, not this company's cost.")
+        else:
+            try:
+                adj = net["adjustments"]
+                q_end = pd.Timestamp(mc["as_of"])
+                q = adj[(adj.date >= q_end - pd.Timedelta(days=107)) & (adj.date <= q_end)]
+                d_q = float(q.difficulty.mean()) if len(q) else None
+            except Exception:
+                d_q = None
+            adj_cost = rx.difficulty_adjusted_cost(mc["ex_da"], d_q, diff)
+            m[3].metric(f"{focus} cost to mine ({mc['as_of']:%b %Y} qtr)", f"${mc['ex_da']:,} / ${mc['incl_da']:,}",
+                        "cash / incl. depreciation", delta_color="off",
+                        help=f"{focus}'s reported cost per BTC mined (excl. / incl. miner depreciation). Source: {mc['source']}.")
+            stress = (f"🔴 **below** {focus}'s all-in cost" if b0 < mc["incl_da"] else f"🟢 above {focus}'s all-in cost")
+            st.markdown(f"**Miner stress:** Bitcoin {_usd(b0)} is **{b0/mc['ex_da']:.2f}×** {focus}'s cash cost and "
+                        f"**{b0/mc['incl_da']:.2f}×** its all-in cost — {stress}. "
+                        + (f"Adjusted for the difficulty rise since that quarter (×{diff/d_q:.2f}), the cash cost is roughly "
+                           f"**{_usd(adj_cost)}** today (estimate, same fleet & power price)." if adj_cost else ""))
+        if cf.alias(focus) == "RIOT":
+            st.caption(f"Riot's power cost alone (computed from its Q2 table): ${73.499e6/F['btc_mined_q']:,.0f}/BTC gross, "
+                       f"${(73.499e6-10.054e6)/F['btc_mined_q']:,.0f}/BTC after power-curtailment credits. "
+                       f"Source: [{F['label']}]({F['url']}) ({F['published']:%b %d %Y}).")
         try:
             from utils.event_calendar import halving_estimate
             h = halving_estimate(height) if height else None

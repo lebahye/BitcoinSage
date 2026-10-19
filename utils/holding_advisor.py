@@ -296,7 +296,7 @@ def advise(symbol: str,
     else:
         checks.append(Check("Market fear (VIX)", "missing", "VIX unavailable."))
 
-    # 5. Decoupling from peers (RIOT-specific divergence check)
+    # 5. Decoupling from peers (divergence check vs the stock's closest miner peers)
     if divergence:
         gap = divergence["gap"]
         if divergence["diverging"] and gap < 0:

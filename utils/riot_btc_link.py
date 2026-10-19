@@ -50,18 +50,18 @@ AI_SOURCES = {
 FACTORS = [
     ("dilution", "Share dilution (new shares issued) %/yr",
      "Each year the company issues new shares, your slice of the company shrinks. Default = the measured share-count "
-     "growth over the last 12 months. RIOT's share count grew ~45%/yr in 2019–2024 but only a few % in the last year.",
+     "growth over the last 12 months (e.g. RIOT's share count grew ~45%/yr in 2019–2024 but only a few % in the last year).",
      -1),
-    ("hashprice", "Hashprice headwind %/yr (network hashrate outgrowing Riot's fleet)",
-     "Miners split a fixed reward pool. If the whole network's computing power grows faster than Riot's own fleet, "
-     "Riot's share of the bitcoin mined each day shrinks. The 2028 halving also cuts the reward in half. 0 = Riot keeps pace.",
+    ("hashprice", "Hashprice headwind %/yr (network hashrate outgrowing the company's fleet)",
+     "Miners split a fixed reward pool. If the whole network's computing power grows faster than the company's own fleet, "
+     "its share of the bitcoin mined each day shrinks. The 2028 halving also cuts the reward in half. 0 = it keeps pace.",
      -1),
     ("energy", "Energy-cost drag %/yr",
-     "Electricity is a miner's biggest cost. Rising Texas power prices squeeze profit; Riot also earns power credits. 0 = neutral.",
+     "Electricity is a miner's biggest cost. Rising power prices squeeze profit; some miners (e.g. Riot) also earn power credits. 0 = neutral.",
      -1),
     ("ai_hpc", "AI / data-centre uplift %/yr",
-     "Extra value from leasing data-centre space to AI companies (not tied to BTC). Riot has ~$9.8B of contracted long-term "
-     "leases (AMD + a frontier AI lab, starting 2026–2028); the Corsicana deal is a non-binding letter of intent. 0 = adds no "
+     "Extra value from leasing data-centre space to AI companies (not tied to BTC). The company's contracted AI/HPC "
+     "megawatts and contract value (cited, where on file) are listed below the inputs. 0 = adds no "
      "value beyond what the share price already reflects.",
      +1),
 ]

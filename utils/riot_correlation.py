@@ -1,5 +1,5 @@
 """
-utils/riot_correlation.py — which stocks/markets move most like RIOT?
+utils/riot_correlation.py — which stocks/markets move most like a chosen anchor stock (RIOT by default)?
 
 Ported from the standalone RIOT correlation study (riot_corr/corr.py):
   * daily log returns, everything aligned on RIOT's trading calendar
@@ -89,7 +89,7 @@ def group_summary(df: pd.DataFrame) -> pd.DataFrame:
 
 def divergence_check(closes: pd.DataFrame, peers: list, anchor: str = ANCHOR,
                      lookback: int = 20) -> Optional[dict]:
-    """Compare RIOT's last-`lookback`-day return and correlation with its top peers."""
+    """Compare the anchor's last-`lookback`-day return and correlation with its top peers."""
     cols = [anchor] + [p for p in peers if p in closes.columns]
     if anchor not in closes.columns or len(cols) < 2:
         return None
@@ -110,11 +110,24 @@ def divergence_check(closes: pd.DataFrame, peers: list, anchor: str = ANCHOR,
             "diverging": bool(diverging), "lookback": lookback, "peers": cols[1:]}
 
 
+def anchor_universe(anchor: str = ANCHOR) -> Dict[str, tuple]:
+    """The comparison set for any anchor: the usual universe plus RIOT (so other stocks are compared with RIOT too)."""
+    u = {ANCHOR: ("Miners", "Riot Platforms — US miner + AI data centres")}
+    u.update(CORRELATION_UNIVERSE)
+    u.pop(anchor, None)
+    return u
+
+
 def load_riot_correlations(anchor: str = ANCHOR) -> dict:
-    """Fetch data and compute everything the UI needs (cached by fetch layer)."""
-    tickers = tuple([anchor] + [t for t in CORRELATION_UNIVERSE if t != anchor])
+    """Fetch data and compute everything the UI needs for ANY anchor stock (cached by the fetch layer).
+
+    The download list is sorted and anchor-independent for universe members, so switching the anchor between
+    miners reuses one cached download."""
+    anchor = (anchor or ANCHOR).upper()
+    universe = anchor_universe(anchor)
+    tickers = tuple(sorted(set([anchor, ANCHOR] + list(CORRELATION_UNIVERSE))))
     closes = fetch_daily_closes(tickers, "1y")
-    table = compute_correlations(closes, anchor)
+    table = compute_correlations(closes, anchor, universe)
     if table.empty:
         return {"ok": False, "error": "Price history unavailable from Yahoo Finance.", "fetched_at": fetched_at()}
     groups = group_summary(table)

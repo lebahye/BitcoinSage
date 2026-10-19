@@ -141,10 +141,11 @@ def get_advice(symbol: str = "RIOT"):
     btc = compute_facts(closes["BTC-USD"]) if "BTC-USD" in closes.columns else {}
     vix = float(closes["^VIX"].dropna().iloc[-1]) if "^VIX" in closes.columns and closes["^VIX"].notna().any() else None
     div = None
-    if symbol == "RIOT":
+    from utils.tickers import CORRELATION_UNIVERSE
+    if symbol == "RIOT" or symbol in CORRELATION_UNIVERSE:     # any stock with a peer set (was RIOT only)
         try:
             from utils.riot_correlation import load_riot_correlations
-            div = load_riot_correlations().get("divergence")
+            div = load_riot_correlations(symbol).get("divergence")
         except Exception:
             div = None
     pos = positions.get(symbol, {})
@@ -176,11 +177,14 @@ class HoldingPlan:
                    "Educational tool — **not financial advice**.")
 
         positions, _ = _load_user_data()
-        held = [s for s, p in positions.items() if p.get("shares", 0) > 0] or ["RIOT"]
-        default = held.index("RIOT") if "RIOT" in held else 0
-        symbol = st.selectbox("Which holding?", held, index=default,
-                              format_func=lambda s: f"{s} — {MINING_STOCKS.get(s, positions.get(s, {}).get('name', s))}",
-                              help="Your holdings from the Portfolio tab. RIOT is your largest position.")
+        held = sorted([s for s, p in positions.items() if p.get("shares", 0) > 0],
+                      key=lambda s: -positions[s].get("shares", 0)) or ["RIOT"]
+        from components.stock_verdict import pick_following_verdict
+        symbol = pick_following_verdict(
+            st, "Which holding?", held, "plan_symbol", held[0],
+            format_func=lambda s: f"{s} — {MINING_STOCKS.get(s, positions.get(s, {}).get('name', s))}",
+            help="Your holdings from the Portfolio tab (largest first). Follows the stock picked on ⚖️ Stock Verdict "
+                 "when you hold it. Bitcoin to 2030 below uses the same stock.")
 
         with st.spinner("Checking prices, Bitcoin, the VIX and your position…"):
             adv, closes, positions, targets = get_advice(symbol)

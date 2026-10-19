@@ -53,6 +53,27 @@ def ticker_universe(positions: Dict[str, dict]) -> List[str]:
     return out or ["RIOT"]
 
 
+def pick_following_verdict(container, label: str, opts: List[str], key: str, default: str, **kw) -> str:
+    """A page's own stock selector that follows the ⚖️ Stock Verdict choice.
+
+    When the Verdict's stock changes (and is one of `opts`), this selector jumps to it; otherwise it keeps the user's
+    own pick across section switches (saved under `<key>_saved`, because Streamlit drops widget state for sections
+    that aren't rendered).  No `index=` is passed, so the widget identity never changes."""
+    ss = st.session_state
+    opts = list(opts)
+    saved = ss.get(f"{key}_saved", default)
+    vs = ss.get("verdict_symbol_saved")
+    if vs in opts and vs != ss.get(f"{key}_followed"):
+        ss[f"{key}_followed"] = vs
+        saved = vs
+        ss[key] = vs
+    if ss.get(key) not in opts:
+        ss[key] = saved if saved in opts else (default if default in opts else opts[0])
+    val = container.selectbox(label, opts, key=key, **kw)
+    ss[f"{key}_saved"] = val
+    return val
+
+
 def _usd(x, nd=2):
     return "N/A" if x is None or (isinstance(x, float) and math.isnan(x)) else f"${x:,.{nd}f}"
 
@@ -173,7 +194,6 @@ def _btc2030_row(symbol, s0, targets, held):
 
 def _reflexivity_rows(symbol, s0, b0):
     from utils import reflexivity as rx, signal_hub
-    from utils.riot_facts import Q2_2026 as F
     rows = []
     try:
         from components.reflexivity_dashboard import live_phase_and_edge
@@ -191,35 +211,44 @@ def _reflexivity_rows(symbol, s0, b0):
                          "N/A — share history unavailable" if g1 is None else f"share count {g1:+.1%} over 12 months",
                          V.lean_dilution(g1), WEIGHTS["dilution"] if g1 is not None else 0, "measured",
                          "New shares shrink your slice. ≥10%/yr is heavy dilution."))
-    if symbol != "RIOT":
-        rows.append(Evidence("valuation", "💰 Reflexivity — sum-of-parts value", "RIOT only (filing facts on file for Riot)",
-                             None, 0, "model (untested)"))
-        rows.append(Evidence("miner_stress", "⛏️ Reflexivity — miner stress vs cost to mine", "RIOT only (Riot's reported costs)",
-                             None, 0, "measured"))
-        return rows
+    from utils import company_facts as cf
     try:
-        bal = signal_hub.get_balance("RIOT") or {}
+        bal = signal_hub.get_balance(symbol) or {}
         shares = float(sh.iloc[-1]) if sh is not None and len(sh) else bal.get("shares")
-        yrs_full = max(0.0, (F["lease_191mw_full"] - date.today()).days / 365.25)
-        r = rx.sum_of_parts(s0, shares, b0, F["btc_held"], F["cash_usd"], bal.get("total_debt") or 0.0,
-                            (F["lease_191mw_noi_low"] + F["lease_191mw_noi_high"]) / 2, F["lease_191mw_term_years"],
-                            round(yrs_full, 1), 0.09, 0.0, 0.0, 0.0, F["btc_pledged"])
-        ratio = r.get("ratio") if r else None
-        rows.append(Evidence("valuation", "💰 Reflexivity — sum-of-parts value",
-                             "N/A — share count/price unavailable" if ratio is None else
-                             f"market value {ratio:.2f}× the parts (~{_usd(r['per_share'])}/share: BTC + cash + AI lease − debt; "
-                             "build cost & mining business not entered)",
-                             V.lean_sum_of_parts(ratio), WEIGHTS["valuation"] if ratio is not None else 0, "model (untested)",
-                             "Default inputs from the Reflexivity tab. Undisclosed build cost is 0, so the parts are "
-                             "probably overstated."))
+        d = cf.sop_inputs(symbol, bal)
+        if d["btc_held"] is None and d["cash"] is None:
+            rows.append(Evidence("valuation", "💰 Reflexivity — sum-of-parts value",
+                                 f"N/A — no cited balance-sheet facts on file for {symbol}", None, 0, "model (untested)"))
+        else:
+            r = rx.sum_of_parts(s0, shares, b0, d["btc_held"] or 0, d["cash"] or 0.0, d["debt"] or 0.0, d["lease_noi"],
+                                d["lease_years"], d["lease_start"], 0.09, 0.0, 0.0, 0.0, d["btc_pledged"])
+            ratio = r.get("ratio") if r else None
+            # Only weighted when every big part is on file: an AI host whose lease income isn't disclosed would look
+            # "expensive" just because a part is missing.
+            complete = d["lease_disclosed"] or not cf.value(symbol, "ai_contracted_mw")
+            complete = complete and d["btc_held"] is not None and d["cash"] is not None and d["debt"] is not None
+            parts = "BTC + cash" + (" + AI lease" if d["lease_disclosed"] else "") + " − debt"
+            rows.append(Evidence("valuation", "💰 Reflexivity — sum-of-parts value",
+                                 (("N/A — share count/price unavailable" if not r else
+                                  f"N/A — the parts on file add up to {_big(r['total'])} ({parts}): debt exceeds them")
+                                 if ratio is None else
+                                 f"market value {ratio:.2f}× the parts (~{_usd(r['per_share'])}/share: {parts}; "
+                                 "build cost & mining business not entered)")
+                                 + ("" if complete else f" — context only, not on file: {', '.join(d['missing'])}"),
+                                 V.lean_sum_of_parts(ratio),
+                                 WEIGHTS["valuation"] if (ratio is not None and complete) else 0, "model (untested)",
+                                 f"Default inputs from the Reflexivity tab (cash: {d['cash_src']}; debt: {d['debt_src']}). "
+                                 "Undisclosed build cost is 0, so the parts are probably overstated."))
     except Exception as e:
         rows.append(Evidence("valuation", "💰 Reflexivity — sum-of-parts value", f"N/A ({type(e).__name__})", None, 0, "model (untested)"))
+    mc = cf.miner_cost(symbol)
     rows.append(Evidence("miner_stress", "⛏️ Reflexivity — miner stress vs cost to mine",
+                         f"N/A — no cited cost to mine on file for {symbol}" if mc is None else
                          "N/A — no Bitcoin price" if not b0 else
-                         f"Bitcoin {_big(b0)} = {b0/F['cost_to_mine_ex_da']:.2f}× Riot's cash cost, "
-                         f"{b0/F['cost_to_mine_incl_da']:.2f}× its all-in cost (Q2 2026)",
-                         V.lean_miner_stress(b0, F["cost_to_mine_ex_da"], F["cost_to_mine_incl_da"]),
-                         WEIGHTS["miner_stress"] if b0 else 0, "measured",
+                         f"Bitcoin {_big(b0)} = {b0/mc['ex_da']:.2f}× {symbol}'s cash cost, "
+                         f"{b0/mc['incl_da']:.2f}× its all-in cost ({mc['as_of']:%b %Y} quarter)",
+                         None if (mc is None or not b0) else V.lean_miner_stress(b0, mc["ex_da"], mc["incl_da"]),
+                         WEIGHTS["miner_stress"] if (mc and b0) else 0, "measured",
                          "Below the all-in cost, mining loses money after equipment wear-out."))
     return rows
 
