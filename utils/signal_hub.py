@@ -173,3 +173,26 @@ def get_shares(symbol: str) -> pd.Series:
         return _shares_cached(symbol)
     except Exception:
         return pd.Series(dtype=float)
+
+
+@_cache15
+def _balance_cached(symbol: str) -> dict:
+    import yfinance as yf
+    b = yf.Ticker(symbol).quarterly_balance_sheet
+    if b is None or b.empty:
+        raise _NoData(symbol)
+    col = b.columns[0]
+
+    def g(k):
+        v = b.loc[k, col] if k in b.index else None
+        return None if v is None or pd.isna(v) else float(v)
+    return {"date": pd.Timestamp(col).date(), "total_debt": g("Total Debt"),
+            "cash": g("Cash And Cash Equivalents"), "shares": g("Ordinary Shares Number")}
+
+
+def get_balance(symbol: str) -> dict:
+    """Latest quarterly balance-sheet items from Yahoo (total debt, cash, shares). {} on failure."""
+    try:
+        return _balance_cached(symbol)
+    except Exception:
+        return {}
