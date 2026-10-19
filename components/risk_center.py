@@ -30,14 +30,14 @@ class RiskCenter:
         st.header("⚠️ Risk Center")
         st.write("Position sizing, risk alerts, VaR, stress testing, Monte Carlo simulation, and beta analysis.")
 
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        tab1, tab2, tab4, tab5, tab6 = st.tabs([
             "📊 Position Sizing",
             "📈 VaR & CVaR",
-            "🔗 Correlation",
             "💥 Stress Testing",
             "🎲 Monte Carlo",
             "📈 Beta Analysis"
         ])
+        st.caption("🔗 Correlation between stocks has moved to the **RIOT Correlation Map** tab.")
 
         with tab1:
             self._render_position_sizing_tab(selected_stocks, stock_names)
@@ -46,9 +46,6 @@ class RiskCenter:
 
         with tab2:
             self._render_var_cvar_tab(stock_data)
-
-        with tab3:
-            self._render_correlation_tab(selected_stocks)
 
         with tab4:
             self._render_stress_test_tab(stock_data, selected_stocks)

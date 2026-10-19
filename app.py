@@ -29,6 +29,7 @@ from components.backtesting_dashboard import BacktestingDashboard
 from components.weekly_outlook import WeeklyOutlook
 from components.volatility_hole_chart import VolatilityHoleChart
 from components.reflexivity_dashboard import ReflexivityDashboard
+from components.riot_correlation_map import RiotCorrelationMap
 
 # ─── Page config (must be first Streamlit call) ──────────────────────────────
 
@@ -116,6 +117,10 @@ def get_vol_hole():
 @st.cache_resource
 def get_reflexivity():
     return ReflexivityDashboard()
+
+@st.cache_resource
+def get_riot_corr():
+    return RiotCorrelationMap()
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -386,6 +391,7 @@ def main():
     # ── 12 Tabs ───────────────────────────────────────────────────────────────
     tabs = st.tabs([
         "📊 Market Overview",
+        "🔗 RIOT Correlation Map",
         "🚦 Trade Signals",
         "🎯 AI Predictions",
         "⚡ Options Center",
@@ -400,7 +406,7 @@ def main():
         "📖 Research",
     ])
 
-    (tab_market, tab_signals, tab_ai, tab_options, tab_flow, tab_ta,
+    (tab_market, tab_corr, tab_signals, tab_ai, tab_options, tab_flow, tab_ta,
      tab_poly, tab_sentiment, tab_risk, tab_portfolio, tab_lab,
      tab_reflex, tab_research) = tabs
 
@@ -415,6 +421,13 @@ def main():
                         stock_data, selected_stocks, MINING_STOCKS, chart_builder)
                 except Exception as e:
                     _tab_error("Market Overview", e)
+
+    # ── RIOT Correlation Map (single home for correlation) ───────────────────
+    with tab_corr:
+        try:
+            get_riot_corr().render(selected_stocks)
+        except Exception as e:
+            _tab_error("RIOT Correlation Map", e)
 
     # ── 2 · Trade Signals ─────────────────────────────────────────────────────
     with tab_signals:

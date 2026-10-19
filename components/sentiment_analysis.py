@@ -19,11 +19,9 @@ class SentimentAnalysis:
         st.subheader("📰 Market Sentiment Analysis")
         st.write("Track market sentiment, fear/greed indicators, and correlation signals across crypto and traditional markets.")
         
-        # Market sentiment overview
-        self._render_market_sentiment_overview()
-        
-        # Crypto correlation analysis
-        self._render_crypto_correlation(selected_stocks)
+        # Market levels (BTC / VIX / S&P) are shown once in the Command Center;
+        # correlations live in the RIOT Correlation Map tab (the old crypto-correlation
+        # box here was always empty because of the BTC date-alignment bug).
         
         # Sector sentiment
         self._render_sector_sentiment(selected_stocks, stock_names)

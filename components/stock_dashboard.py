@@ -9,9 +9,8 @@ class StockDashboard:
     def render(self, stock_data, selected_stocks, stock_names, chart_builder):
         """Render the main stock dashboard"""
         
-        # Market overview section
-        self._render_market_overview(stock_data)
-        
+        # (BTC / VIX / S&P / sector strip now lives once, in the Command Center at the top)
+
         # Stock performance grid
         self._render_performance_grid(stock_data, selected_stocks, stock_names)
         
@@ -19,10 +18,9 @@ class StockDashboard:
         st.subheader("📈 Price Charts")
         self._render_price_charts(stock_data, selected_stocks, chart_builder)
         
-        # Correlation analysis
-        if len(selected_stocks) > 1:
-            st.subheader("🔗 Correlation Analysis")
-            self._render_correlation_analysis(stock_data, chart_builder)
+        # Correlation now lives in one place: the 🔗 RIOT Correlation Map tab
+        st.caption("🔗 For how these stocks move together (and versus Bitcoin, AI stocks and the VIX), "
+                   "see the **RIOT Correlation Map** tab.")
     
     def _render_market_overview(self, stock_data=None):
         """Render market overview section"""

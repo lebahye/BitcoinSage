@@ -65,3 +65,17 @@ Streamlit `AppTest` against live Yahoo Finance data and records uncaught excepti
 - `components/personal_portfolio.py`: saved positions, targets and stop-losses are passed through `resolve_keys`, so a local
   `data/positions.json` on Replit that still says `BITF` is shown as `KEEL` (share counts untouched; nothing invented).
 - Smoke: 9 tests pass, 0 exceptions, 0 error boxes. ✅
+
+### Step 4 — RIOT Correlation Map + consolidate correlation panels (Priority C/D)
+- New `utils/riot_correlation.py` (ported from the standalone RIOT study): ranks 26 tickers vs RIOT over 1Y and 3M (log returns on
+  RIOT's trading days, BTC weekend moves rolled into Monday), quarter-by-quarter stability badge (steady / flips), group averages,
+  and a divergence check (RIOT's last 20 trading days vs its 5 closest miners). New `tests/test_riot_correlation.py` (2 tests).
+- New `components/riot_correlation_map.py` tab "🔗 RIOT Correlation Map": headline metrics, plain-English verdict, divergence alert,
+  ranked chart (1Y bars + 3M markers, coloured by group), group comparison, inverse/hedge panel (VIX, UUP, USO, TLT with
+  stable/flips badge and per-quarter numbers), full table + CSV download, data source and computed-at timestamp.
+- Live result reproduces the earlier analysis: CLSK 0.84, KEEL 0.81, HUT 0.80, MARA 0.78 …; miners avg 0.76, AI data centers 0.60,
+  Bitcoin 0.49; VIX −0.50 (steady), UUP −0.28 and USO −0.25 (flip), TLT +0.17.
+- Removed duplicates: Market Overview correlation heatmap + "Correlation Insights", Risk Center "Correlation" tab, Sentiment tab
+  "Crypto Market Correlation" (was always empty — same alignment bug), and Market Overview's BTC/VIX/S&P strip (duplicate of the
+  Command Center). Each now shows a one-line pointer to the new tab.
+- Smoke: 11 tests pass, 0 exceptions, 0 error boxes; new tab metrics populated. ✅
