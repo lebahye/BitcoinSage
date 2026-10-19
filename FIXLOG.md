@@ -121,3 +121,23 @@ Streamlit `AppTest` against live Yahoo Finance data and records uncaught excepti
   Top-level `st.tabs` replaced with a horizontal section selector — only the chosen section runs. Short-term tools are labelled as such.
 - Smoke (now visits all 15 sections one by one): 18 tests pass, 0 exceptions, 0 failure boxes in any section
   (remaining red boxes are intentional indicators like "Trading Below VWAP"); whole sweep 41 s, most sections < 2 s. ✅
+
+### Final verification
+- `pytest tests/` — 18 passed (market-data alignment, tickers, RIOT correlation, holding advisor, trade targets).
+- `python -m py_compile` on every touched file — OK.
+- `streamlit run app.py --server.headless true` — server starts, `/_stcore/health` = ok, `/` = 200.
+- AppTest sweep of all 15 sections — 0 uncaught exceptions, 0 failure boxes.
+- `origin/main` still at `a08553d` (no new pushes while working). Nothing pushed; branch is local only.
+
+## Remaining risks / not done
+- **Yahoo Finance rate limits**: the app still relies on many unauthenticated Yahoo calls (now far fewer per click). If Yahoo
+  throttles, sections show clear "unavailable" messages rather than fake numbers. Schwab real-time path untouched (credentials not touched).
+- **Sentiment** still shows "Neutral (50)" when the Alpha Vantage free tier is exhausted (pre-existing, already labelled in the UI;
+  it's the same for every stock so it doesn't change rankings).
+- A few deep technical helpers still fall back to neutral values on errors (e.g. RSI/Stochastic = 50 in `advanced_ta_dashboard.py`,
+  probability = 50 in `weekly_outlook.py`). Low impact; not part of the hold/sell call.
+- The Hold/Trim/Sell rules and the Bear/Base/Bull yearly-return defaults (−20% / +5% / +25%) are judgement calls, clearly labelled
+  and editable — not predictions. The breakeven/margin estimate assumes 30 J/TH rigs and $0.05/kWh.
+- "Share of portfolio" only counts holdings saved in the app, not the user's whole net worth.
+- `use_container_width` deprecation warnings (Streamlit pinned at 1.49.1, still works; removal is after 2025-12-31 in newer versions).
+- The section selector replaces tabs: users click a section name at the top instead of a tab (same order/names).

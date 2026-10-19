@@ -76,3 +76,12 @@ The application leverages Streamlit's built-in session state management for main
 - **time**: Performance monitoring and rate limiting for API calls
 
 The application is designed to be self-contained with minimal external service dependencies, relying primarily on publicly available financial data APIs. The modular architecture allows for easy integration of additional data sources or analytical tools as needed.
+## October 2026 hardening (branch global/dashboard-hardening)
+- `utils/market_data.py` — all cross-asset maths (BTC vs stocks) must go through `align_frame` / `beta_corr`: BTC is stamped
+  in UTC and trades weekends, stocks are New York time; never join their raw indexes.
+- `utils/tickers.py` — single list of symbols + rename map (`BITF → KEEL`).
+- `utils/riot_correlation.py` + `components/riot_correlation_map.py` — the only correlation view.
+- `utils/holding_advisor.py` + `components/holding_plan.py` — "🧭 My Plan", the single Hold/Trim/Sell/Rotate call.
+- `utils/explain.py` — plain-English glossary for tooltips and "What is this?" boxes.
+- Top-level navigation is a section selector (only the chosen section runs) to stay under Yahoo's rate limits.
+- `FIXLOG.md` lists every change and test result. Run `pytest tests/` after changes.
