@@ -337,3 +337,32 @@ bullish shops. Hardcoded policy dates and facts were verified 2026-10-19 and nee
 **Tests:** `tests/test_reflexivity.py` (24): equal-weight basket uses returns, beta dating, index bounds/N/A, phases, **no look-ahead** in the phase frame, non-overlapping entries, next-day action and full windows only, a planted edge is found while noise isn't, subsidy by height/date, breakeven formula and halving doubling, hashprice, the point-in-time percentile, annuity PV, sum-of-parts arithmetic, dilution, EDGAR parser and graceful failure, cited facts. Suite: 95 passed.
 
 **Risks:** the backtest rests on one 2018–2026 history (about 2 cycles, 12–35 cases per cell). The lease PV ignores the undisclosed build cost unless the user enters it. The difficulty-adjusted Riot cost is an estimate. EDGAR is blocked from some hosts. mempool.space and blockchain.info are free and unauthenticated, so they may rate-limit, and the tab then shows N/A. Riot facts must be refreshed after each quarterly report.
+
+# ⚖️ Stock Verdict — one call per stock from every tab (branch global/verdict-page)
+
+**Request:** "pull all the data from all the tabs and use it to determine what to do with the stock. I want to see only one
+stock at a time with a pull-down option to select the stock." The user chose a NEW one-stock page; the other tabs are unchanged.
+
+| # | What | How |
+|---|---|---|
+| V1 | New first section, the default landing page | `app.py` SECTIONS starts with "⚖️ Stock Verdict". The "New here?" guide points to it first |
+| V2 | Pull-down, one stock at a time | `ticker_universe()`: holdings first (RIOT first, then by share count), then the other miners and the Correlation-Map stocks/ETFs (not ^VIX/BTC-USD/macro ETFs). The choice is kept in `session_state` across section switches. The widget is seeded from a saved copy, with **no `index=`**, because a changing index gave the widget a new identity and undid every second selection (found by AppTest, fixed before commit) |
+| V3 | One verdict: HOLD / ADD / TRIM / SELL / ROTATE + confidence | `utils/verdict.py` (pure, deterministic). **Held:** action = `combine_plan(My Plan, Add/Wait)`: HOLD+ADD → ADD, otherwise My Plan's call. **Not held:** `combine_not_held`: no personal rules; SELL (= avoid) at 5+ market risk points, ADD (= small starter) if the entry rule fires, otherwise HOLD (= watch only) |
+| V4 | Same answer everywhere | The evidence can only move confidence, by at most one notch (agree → up, clash ≥0.6 → down, all-N/A → down). My Plan shows "⚖️ Stock Verdict: X" from the same `combine_plan`. Tests cover 162 synthetic My Plan states × 4 evidence sets, plus the page's wiring (`build_for`) and the My Plan source. A full-app AppTest checked RIOT and MARA on both pages |
+| V5 | Evidence from all tabs, weighted toward long-term/tested | Weighted (sum 100 when held): My Plan market checks 30 (backtested), your position rules 25 (personal rule), Add/Wait 10 (backtested), Bitcoin-to-2030 10 (model, untested; bullish only if both beta regimes imply ≥20% upside), dilution 5 (measured), sum-of-parts 5 and miner stress 5 (RIOT only). Price-swing risk counts 10 for stocks you don't own. **Weight 0 (context):** track record, analyst targets, Reflexivity phase (tested, no edge), Forecast Center range (non-directional), Trade Signals, TA indicators, Next-Mover (lazy; watchlist only), news tone, Fear & Greed, correlations vs BTC/VIX/UUP, events in the next 14 days. **Not used, with the reason shown:** options, institutional flow, Monte Carlo |
+| V6 | Transparency | Evidence table (source, reading, leans, weight, tested?, what it is) with column tooltips. "Why" bullets (strongest weighted pulls first, plus the confidence reasoning). A "where the tabs disagree" panel. "What would change the verdict": My Plan triggers, ADD levels, Bitcoin needed for your target, and for concentration the shares to sell to reach 40% (two cases: money reinvested vs to cash) |
+| V7 | N/A, never faked | Each source fails on its own and shows N/A. Sum-of-parts and miner stress say "RIOT only" elsewhere. With no price, the verdict is N/A with a warning. Non-miners get a caveat that My Plan's checks were built for miners |
+| V8 | Speed | Reuses the cached engines (My Plan bundle 15 min, backtest 24 h, BTC fit 15 min, reflexivity 1 h, news 30 min). Next-Mover only loads behind "Load slower extras". The verdict page does **not** record calls or send notifications; My Plan still does that |
+
+**Tests:** `tests/test_verdict.py` (14): combine truth tables (held and not held), the held verdict never contradicts My Plan (and confidence stays within one notch), the My Plan page uses `combine_plan`, `build_for` wiring (held and not held), determinism (including row order), weighted score and confidence notches, N/A rows ignored and an all-N/A or no-price verdict, every lean rule returns None on missing input, lean directions, disagreements, the concentration share math, ticker order. Suite: 109 passed. AppTests:
+- RIOT, MARA, CLSK, HUT (not held) and NVDA (not held): no exceptions or errors, about 2–7 s cold.
+- The selection survives switching to My Plan and back.
+- With "slow extras" on, Next-Mover adds about 6 s.
+- The degraded run (secondary sources down) gives the same action with N/A rows, and the price-down run gives N/A plus a warning.
+- All-section smoke: error counts unchanged from baseline.
+
+**Risks:** the verdict for a holding is only as good as My Plan's rules, and its own 5-year track record shows the timing rules
+did not beat holding, so the page leans on them for risk control, not prediction. The weights and lean thresholds are judgement calls
+(documented and tested, not optimised). Bitcoin-to-2030 and sum-of-parts depend on assumptions (the build cost is undisclosed, so the parts are overstated).
+For non-miners the Bitcoin/peer checks are a rough fit. Confidence on this page can differ by one notch from My Plan's badge,
+and the page explains why.
