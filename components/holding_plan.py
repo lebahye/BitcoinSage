@@ -201,6 +201,11 @@ class HoldingPlan:
             f'<div style="font-size:1.05rem;color:#eee">{adv.headline}</div></div>',
             unsafe_allow_html=True)
         explain("recommendation")
+        from utils.verdict import combine_plan
+        _vd = combine_plan(adv.action, add.action if add else None)
+        st.caption(f"⚖️ **Stock Verdict: {_vd}** — the same single call the ⚖️ Stock Verdict page shows for {symbol} "
+                   + ("(this HOLD plus the ADD signal below)." if _vd != adv.action else "(My Plan's call is the verdict).")
+                   + " That page adds every other tab's evidence, which can only change how sure it is.")
         _bt = load_backtest(symbol)
         if _bt:
             _sm, _b = _bt["summary"], _bt["baseline"]["6M"]

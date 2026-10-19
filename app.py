@@ -282,8 +282,10 @@ def main():
 
     with st.expander("👋 New here? How to use this dashboard", expanded=False):
         st.markdown("""
-1. **🧭 My Plan** — start here. One clear call for each holding (**Hold / Trim / Sell / Rotate**), the reasons,
-   what would change the call, and a path-to-2030 price range.
+1. **⚖️ Stock Verdict** — start here. Pick one stock from the pull-down and get **one** call
+   (**Hold / Add / Trim / Sell / Rotate**) built from every tab, with the evidence, where the tabs disagree and what
+   would change it. For stocks you own it is exactly My Plan's call.
+   **🧭 My Plan** — the full detail behind that call for each holding: reasons, track record, path-to-2030 price range.
 2. **🏆 Portfolio** — enter or edit your shares, cost basis and target prices. Everything else uses these numbers.
 3. **🔗 RIOT Correlation Map** — what really moves your RIOT shares (other miners, AI stocks, Bitcoin, market fear).
 4. **⚠️ Risk Center** and **🔄 Reflexivity** — how bad a Bitcoin crash could hit you, and where we are in the boom/bust cycle.
@@ -299,6 +301,7 @@ Nothing here is financial advice.
     # rerun — hundreds of Yahoo Finance calls per click, which triggers Yahoo's
     # rate limit and made the app slow.)
     SECTIONS = [
+        "⚖️ Stock Verdict",
         "🧭 My Plan",
         "🏆 Portfolio",
         "🔗 RIOT Correlation Map",
@@ -317,12 +320,20 @@ Nothing here is financial advice.
     ]
     view = st.radio("Section", SECTIONS, horizontal=True, key="main_view",
                     label_visibility="collapsed",
-                    help="First six = long-term holder views. The rest are short-term trading tools.")
+                    help="First seven = long-term holder views. The rest are short-term trading tools.")
     st.divider()
 
-    (tab_plan, tab_portfolio, tab_corr, tab_market, tab_risk, tab_reflex, tab_lab,
+    (tab_verdict, tab_plan, tab_portfolio, tab_corr, tab_market, tab_risk, tab_reflex, tab_lab,
      tab_signals, tab_ai, tab_options, tab_flow, tab_ta,
      tab_sentiment, tab_poly, tab_research) = [view == name for name in SECTIONS]
+
+    # ── Stock Verdict: one call per stock from every tab (= My Plan's call for holdings) ──
+    if tab_verdict:
+        try:
+            from components.stock_verdict import StockVerdict
+            StockVerdict().render()
+        except Exception as e:
+            _tab_error("Stock Verdict", e)
 
     # ── My Plan: the single source of truth for Hold / Trim / Sell / Rotate ──
     if tab_plan:
